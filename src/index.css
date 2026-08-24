@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-800 font-sans antialiased;
+    font-feature-settings: 'ss01' on;
+  }
+
+  /* Thanh cuộn mảnh, hợp tông */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-ink-200 rounded-full border-2 border-solid border-transparent bg-clip-content;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-300 bg-clip-content;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-white rounded-lg;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl2 border border-ink-100 shadow-soft;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lift hover:-translate-y-0.5;
+  }
+
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-[.08em] text-ink-400;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-800
+           placeholder:text-ink-300 transition-all duration-200
+           focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 focus:outline-none;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  /* Nền trang trí dạng lưới chấm mềm */
+  .dot-grid {
+    background-image: radial-gradient(rgba(244, 63, 142, 0.13) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  .skeleton {
+    @apply bg-ink-100 rounded-lg;
+    background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+    background-size: 500px 100%;
+    background-repeat: no-repeat;
+    @apply animate-shimmer;
+  }
+}
+
+@layer utilities {
+  .stagger > * {
+    animation: fade-up 0.42s cubic-bezier(0.21, 0.9, 0.35, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .stagger > *:nth-child(2) { animation-delay: 0.06s; }
+  .stagger > *:nth-child(3) { animation-delay: 0.1s; }
+  .stagger > *:nth-child(4) { animation-delay: 0.14s; }
+  .stagger > *:nth-child(5) { animation-delay: 0.18s; }
+  .stagger > *:nth-child(6) { animation-delay: 0.22s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.26s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.3s; }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
