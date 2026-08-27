@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard'
 import { StaffDashboard } from './pages/StaffDashboard'
 import { MyShifts } from './pages/MyShifts'
 import { Attendance } from './pages/Attendance'
+import { SelfCheckIn } from './pages/SelfCheckIn'
 import { Availability } from './pages/Availability'
 import { AutoSchedule } from './pages/AutoSchedule'
 import { Schedule } from './pages/Schedule'
@@ -75,7 +76,7 @@ export default function App() {
                   </RequireStaff>
                 }
               />
-              <Route path="/attendance" element={<Attendance />} />
+              <Route path="/attendance" element={isAdmin ? <Attendance /> : <SelfCheckIn />} />
               <Route
                 path="/availability"
                 element={
