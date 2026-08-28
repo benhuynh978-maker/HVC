@@ -73,7 +73,13 @@ interface Store {
   resolveSwap: (swapId: string, status: 'approved' | 'rejected' | 'cancelled') => void
 
   /* Điểm danh */
-  setAttendance: (assignmentId: string, status: AttendanceStatus) => void
+  setAttendance: (
+    assignmentId: string,
+    status: AttendanceStatus,
+    opts?: { verifiedByPhoto?: boolean },
+  ) => void
+  /** Bước 2 (tuỳ chọn) — "Tôi sẽ tới ca này", không phạt nếu bỏ lỡ. */
+  ackPreShift: (assignmentId: string) => void
 
   /* Điểm bán ngoài */
   applyToEvent: (eventId: string, memberId: string) => void
@@ -432,7 +438,7 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   /* ---------------------------------------------------------------- */
-  setAttendance(assignmentId, status) {
+  setAttendance(assignmentId, status, opts) {
     const a = get().data.assignments.find((x) => x.id === assignmentId)
     if (!a) return
     const prevDelta = RELIABILITY_DELTA[a.attendance] ?? 0
@@ -447,6 +453,7 @@ export const useStore = create<Store>((set, get) => ({
                 ...x,
                 attendance: status,
                 checkInAt: status === 'ontime' || status.startsWith('late') ? new Date().toISOString() : undefined,
+                selfCheckInVerified: opts?.verifiedByPhoto ?? x.selfCheckInVerified,
               }
             : x,
         ),
@@ -463,6 +470,18 @@ export const useStore = create<Store>((set, get) => ({
       const member = get().data.members.find((m) => m.id === a.memberId)
       get().log('danger', `Ghi nhận vắng không báo trước: ${member?.name ?? ''}. Kích hoạt thang hệ quả khôi phục — bước 1: trò chuyện riêng để hỏi nguyên nhân.`, a.memberId)
     }
+  },
+
+  ackPreShift(assignmentId) {
+    set((s) => ({
+      data: {
+        ...s.data,
+        assignments: s.data.assignments.map((x) =>
+          x.id === assignmentId ? { ...x, preShiftAckAt: new Date().toISOString() } : x,
+        ),
+      },
+    }))
+    get().persist()
   },
 
   /* ---------------------------------------------------------------- */

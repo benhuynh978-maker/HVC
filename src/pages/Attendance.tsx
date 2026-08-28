@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  Camera,
   CheckCircle2,
   Clock3,
   MessageSquareWarning,
@@ -140,12 +141,19 @@ export function Attendance() {
                       {member.name}
                       {a.isLead && <span className="ml-1.5 text-[11px] font-bold text-amber-600">· Ca trưởng</span>}
                     </p>
-                    <span className={cn('chip mt-1', ATTENDANCE_STYLE[a.attendance])}>
-                      {ATTENDANCE_LABEL[a.attendance]}
-                      {RELIABILITY_DELTA[a.attendance] !== 0 && (
-                        <span className="ml-1 font-extrabold">
-                          {RELIABILITY_DELTA[a.attendance] > 0 ? '+' : ''}
-                          {RELIABILITY_DELTA[a.attendance]}
+                    <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className={cn('chip', ATTENDANCE_STYLE[a.attendance])}>
+                        {ATTENDANCE_LABEL[a.attendance]}
+                        {RELIABILITY_DELTA[a.attendance] !== 0 && (
+                          <span className="ml-1 font-extrabold">
+                            {RELIABILITY_DELTA[a.attendance] > 0 ? '+' : ''}
+                            {RELIABILITY_DELTA[a.attendance]}
+                          </span>
+                        )}
+                      </span>
+                      {a.selfCheckInVerified && (
+                        <span className="chip border border-sky-100 bg-sky-50 text-sky-700" title="Đã tự điểm danh qua camera">
+                          <Camera size={11} /> Ảnh
                         </span>
                       )}
                     </span>

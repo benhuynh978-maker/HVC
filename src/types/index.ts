@@ -114,6 +114,10 @@ export interface Assignment {
   declineReason?: string
   /** Đánh dấu ca này nhận từ chợ ca / dự bị (dùng để cộng điểm ghi nhận). */
   pickedUp?: boolean
+  /** Bước 2 (tuỳ chọn, không phạt nếu bỏ lỡ): giờ bấm "Tôi sẽ tới ca này". */
+  preShiftAckAt?: string
+  /** Bước 3: true nếu điểm danh đi qua đúng luồng chụp ảnh (khác với Admin tự gán tay). */
+  selfCheckInVerified?: boolean
 }
 
 export type SwapType = 'release' | 'swap'
