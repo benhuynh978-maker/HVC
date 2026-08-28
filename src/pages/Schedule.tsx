@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { CalendarPlus, Crown, LayoutGrid, MapPin, Pencil, Plus, Store, Trash2, Users } from 'lucide-react'
+import { CalendarPlus, Crown, LayoutGrid, MapPin, Pencil, Plus, Store, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { Badge, Button, Card, CardHeader, EmptyState, Modal, PageHeader, Segmented, useConfirm } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Modal, PageHeader, Segmented, useConfirm } from '../components/ui'
 import { AvatarStack, DayHeader, TierLegend, WeekNav } from '../components/shared'
 import { TIER_STYLE } from '../data/config'
 import { cn, formatDateLong, weekDays, weekStartOf, today } from '../lib/utils'
 import { isUnderStaffed, presentCount } from '../lib/metrics'
-import type { ShiftInstance, ShiftTier } from '../types'
+import type { ExternalEvent, ShiftInstance, ShiftTier } from '../types'
 
 const TIER_OPTIONS: { value: ShiftTier; label: string }[] = [
   { value: 'peak', label: 'Cao điểm' },
@@ -35,6 +35,7 @@ export function Schedule() {
   const [weekStart, setWeekStart] = useState(weekStartOf(today()))
   const [area, setArea] = useState<'room' | 'external'>('room')
   const [openCell, setOpenCell] = useState<{ shiftId: string } | null>(null)
+  const [openEvent, setOpenEvent] = useState<ExternalEvent | null>(null)
   const [formTarget, setFormTarget] = useState<{ date: string; shift?: ShiftInstance } | null>(null)
   const { ask, node } = useConfirm()
 
@@ -111,46 +112,86 @@ export function Schedule() {
       </div>
 
       {area === 'external' ? (
-        <>
-          {weekEvents.length === 0 ? (
-            <Card>
-              <EmptyState
-                icon={<Store size={22} />}
-                title="Tuần này chưa có điểm bán ngoài nào"
-                desc="Tạo và quản lý ứng viên ở trang &quot;Điểm bán ngoài&quot;."
-              />
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 stagger">
-              {weekEvents.map((ev) => (
-                <Card key={ev.id} className="overflow-hidden">
-                  <CardHeader
-                    icon={<Store size={16} />}
-                    title={ev.name}
-                    desc={`${formatDateLong(ev.date)} · ${ev.start}–${ev.end}`}
-                    action={
-                      <Badge tone={ev.status === 'locked' ? 'success' : ev.status === 'done' ? 'neutral' : 'info'}>
-                        {ev.status === 'locked' ? 'Đã chốt' : ev.status === 'done' ? 'Hoàn tất' : 'Đang mở'}
-                      </Badge>
-                    }
-                  />
-                  <div className="space-y-2.5 border-t border-ink-100 px-5 py-4">
-                    <p className="flex items-center gap-1.5 text-[12px] text-ink-500">
-                      <MapPin size={12} /> {ev.location}
-                    </p>
-                    <p className="flex items-center gap-1.5 text-[12px] text-ink-500">
-                      <Users size={12} /> Cần <strong className="text-ink-800">{ev.needed}</strong> người ·{' '}
-                      {ev.selected.length} đã chọn
-                    </p>
-                    {ev.selected.length > 0 && (
-                      <AvatarStack members={ev.selected.map((id) => memberMap[id]).filter(Boolean)} max={6} size="sm" />
-                    )}
-                  </div>
-                </Card>
-              ))}
+        weekEvents.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<Store size={22} />}
+              title="Tuần này chưa có điểm bán ngoài nào"
+              desc="Tạo và quản lý ứng viên ở trang &quot;Điểm bán ngoài&quot;."
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden animate-fade-up">
+            <div className="overflow-x-auto">
+              <div className="min-w-[880px]">
+                <div className="grid grid-cols-[108px_repeat(7,1fr)] border-b border-ink-100 bg-ink-50/60 px-3 py-2.5">
+                  <div />
+                  {days.map((d) => (
+                    <DayHeader key={d} date={d} />
+                  ))}
+                </div>
+
+                {weekEvents.map((ev) => {
+                  const under = ev.selected.length < ev.needed
+                  return (
+                    <div
+                      key={ev.id}
+                      className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch border-b border-ink-50 px-3 py-2 last:border-0"
+                    >
+                      <div className="flex items-center gap-1.5 pr-2">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <div className="min-w-0">
+                          <p className="truncate text-[11.5px] font-bold text-ink-700">{ev.name}</p>
+                          <p className="truncate text-[9.5px] text-ink-400">
+                            {ev.start}–{ev.end}
+                          </p>
+                        </div>
+                      </div>
+
+                      {days.map((d) => {
+                        if (d !== ev.date) {
+                          return <div key={d} className="mx-0.5 my-0.5 rounded-lg" />
+                        }
+                        const members = ev.selected.map((id) => memberMap[id]).filter(Boolean)
+
+                        return (
+                          <button
+                            key={d}
+                            onClick={() => setOpenEvent(ev)}
+                            className={cn(
+                              'mx-0.5 my-0.5 flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
+                              under
+                                ? 'border-rose-200 bg-rose-50/60'
+                                : 'border-ink-100 bg-white hover:border-brand-200',
+                            )}
+                          >
+                            <AvatarStack members={members} max={3} size="xs" />
+                            <span
+                              className={cn(
+                                'text-[10px] font-bold tabular-nums',
+                                under ? 'text-rose-600' : 'text-ink-500',
+                              )}
+                            >
+                              {ev.selected.length}/{ev.needed}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          )}
-        </>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 px-5 py-3.5">
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-ink-500">
+                <span className="h-2 w-2 rounded-full bg-brand-500" /> Điểm bán ngoài
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-rose-500">
+                <span className="h-2 w-2 rounded-full bg-rose-400" /> Chưa đủ người cần
+              </span>
+            </div>
+          </Card>
+        )
       ) : (
         <>
           {mode === 'draft' && (
@@ -326,6 +367,45 @@ export function Schedule() {
                 </div>
               )
             })}
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal chi tiết 1 điểm bán ngoài */}
+      <Modal
+        open={!!openEvent}
+        onClose={() => setOpenEvent(null)}
+        title={openEvent?.name ?? ''}
+        desc={openEvent ? `${openEvent.start}–${openEvent.end} · ${formatDateLong(openEvent.date)}` : ''}
+      >
+        {openEvent && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="flex items-center gap-1.5 text-[12.5px] text-ink-500">
+                <MapPin size={13} /> {openEvent.location}
+              </p>
+              <Badge tone={openEvent.status === 'locked' ? 'success' : openEvent.status === 'done' ? 'neutral' : 'info'}>
+                {openEvent.status === 'locked' ? 'Đã chốt' : openEvent.status === 'done' ? 'Hoàn tất' : 'Đang mở'}
+              </Badge>
+            </div>
+            <p className="text-[12.5px] text-ink-500">
+              Cần <strong className="text-ink-800">{openEvent.needed}</strong> người · {openEvent.selected.length} đã chọn
+            </p>
+            <div className="space-y-2.5">
+              {openEvent.selected.length === 0 && (
+                <p className="py-6 text-center text-[13px] text-ink-400">Chưa có ai được chọn cho điểm bán này.</p>
+              )}
+              {openEvent.selected.map((id) => {
+                const m = memberMap[id]
+                if (!m) return null
+                return (
+                  <div key={id} className="flex items-center gap-3 rounded-xl border border-ink-100 p-3">
+                    <AvatarStack members={[m]} max={1} size="sm" />
+                    <p className="text-[13px] font-bold text-ink-900">{m.name}</p>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </Modal>
