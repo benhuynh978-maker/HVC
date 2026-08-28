@@ -307,12 +307,13 @@ function ShiftCheckInCard({
                 </span>
               )}
             </div>
-          ) : ended ? (
-            <p className="ml-[30px] text-[13px] text-ink-400">
-              Ca đã kết thúc mà chưa điểm danh — liên hệ điều phối viên nếu cần điều chỉnh.
-            </p>
           ) : (
             <div className="ml-[30px]">
+              {ended && (
+                <p className="mb-2.5 text-[12px] text-amber-600">
+                  Ca này đã qua giờ kết thúc — vẫn điểm danh được, trạng thái sẽ tự tính theo giờ chụp.
+                </p>
+              )}
               <CameraCheckIn
                 onDone={(status) => onCheckIn(status)}
                 computeStatus={() => statusFor(startMin, currentMinutes())}
