@@ -397,6 +397,22 @@ function CameraCheckIn({
 
   useEffect(() => stopStream, []) // đảm bảo tắt camera khi rời trang giữa chừng
 
+  // Gắn stream vào <video> SAU khi nó đã thực sự mount trong DOM (chỉ mount
+  // khi state === 'live') — trên mobile (đặc biệt iOS Safari), gọi
+  // video.play() trước khi phần tử tồn tại thường thất bại âm thầm, khiến
+  // khung camera hiện đen đặc dù đã cấp quyền thành công. Trên desktop
+  // Chrome việc này thường "được tha" nên không lộ ra khi test trên máy tính.
+  useEffect(() => {
+    if (state !== 'live' || !videoRef.current || !streamRef.current) return
+    const video = videoRef.current
+    video.srcObject = streamRef.current
+    video.play().catch(() => {
+      // Một số trình duyệt mobile chặn play() tự động dù đã trong user-gesture
+      // (vd Safari khi tab đang chuyển nền) — không coi là lỗi cứng, video sẽ
+      // tự phát khi có tương tác tiếp theo nhờ thuộc tính autoPlay/playsInline.
+    })
+  }, [state])
+
   const startCamera = async () => {
     setState('requesting')
     setErrorMsg('')
@@ -406,10 +422,6 @@ function CameraCheckIn({
         audio: false,
       })
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
       setState('live')
     } catch (err) {
       setState('error')
@@ -480,7 +492,15 @@ function CameraCheckIn({
     <div className="max-w-sm space-y-3">
       <div className="overflow-hidden rounded-xl border border-ink-200 bg-ink-900">
         {state === 'live' ? (
-          <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full -scale-x-100 object-cover" />
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            // eslint-disable-next-line react/no-unknown-property -- thuộc tính cũ dành cho iOS Safari < 10, cần giữ để tương thích ngược
+            webkit-playsinline="true"
+            className="aspect-[4/3] w-full -scale-x-100 object-cover"
+          />
         ) : (
           photo && <img src={photo} alt="Ảnh điểm danh vừa chụp" className="aspect-[4/3] w-full object-cover" />
         )}
