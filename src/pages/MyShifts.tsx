@@ -5,7 +5,9 @@ import {
   Clock3,
   Crown,
   HelpCircle,
+  MapPin,
   ShieldCheck,
+  Store,
   XCircle,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
@@ -66,6 +68,17 @@ export function MyShifts() {
     }
     return rows.sort((x, y) => x.shift.start.localeCompare(y.shift.start) || x.shift.date.localeCompare(y.shift.date))
   }, [data.shifts, data.assignments, user.id, weekStart])
+
+  /**
+   * Điểm bán ngoài mình ĐÃ ĐƯỢC CHỌN, rơi vào đúng tuần đang xem — hiện riêng
+   * hẳn 1 khối bên dưới lưới ca phòng (không nhét chung vào lưới), để không
+   * hiểu lầm là "chưa có lịch" và phân biệt rõ từng điểm khi có từ 2 nơi trở lên.
+   */
+  const myExternalEvents = useMemo(() => {
+    return data.events
+      .filter((ev) => ev.selected.includes(user.id) && weekStartOf(ev.date) === weekStart)
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [data.events, user.id, weekStart])
 
   const hourNow = new Date().getHours()
   const deadlinePassed = hourNow >= CONFIRM_DEADLINE_HOUR
@@ -195,6 +208,34 @@ export function MyShifts() {
           <TierLegend />
         </div>
       </Card>
+
+      {myExternalEvents.length > 0 && (
+        <Card className="mt-5 animate-fade-up">
+          <CardHeader
+            icon={<Store size={17} />}
+            title="Điểm bán ngoài tuần này"
+            desc="Các điểm bán bạn đã được chọn — tách riêng khỏi ca trực phòng ở trên để không nhầm lẫn."
+          />
+          <div className="divide-y divide-ink-100 border-t border-ink-100">
+            {myExternalEvents.map((ev) => (
+              <div key={ev.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-bold text-ink-900">{ev.name}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-500">
+                    <MapPin size={12} /> {ev.location}
+                  </p>
+                  <p className="mt-0.5 text-[11.5px] text-ink-400">
+                    {formatDateLong(ev.date)} · {ev.start}–{ev.end}
+                  </p>
+                </div>
+                <Badge tone={ev.status === 'locked' ? 'success' : ev.status === 'done' ? 'neutral' : 'info'}>
+                  {ev.status === 'locked' ? 'Đã chốt' : ev.status === 'done' ? 'Hoàn tất' : 'Đang mở đăng ký'}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {mine.length === 0 && (
         <Card className="mt-5">

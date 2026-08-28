@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
-import { CalendarPlus, Crown, LayoutGrid, Pencil, Plus, Trash2 } from 'lucide-react'
+import { CalendarPlus, Crown, LayoutGrid, MapPin, Pencil, Plus, Store, Trash2, Users } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { Badge, Button, Card, EmptyState, Modal, PageHeader, Segmented, useConfirm } from '../components/ui'
+import { Badge, Button, Card, CardHeader, EmptyState, Modal, PageHeader, Segmented, useConfirm } from '../components/ui'
 import { AvatarStack, DayHeader, TierLegend, WeekNav } from '../components/shared'
 import { TIER_STYLE } from '../data/config'
 import { cn, formatDateLong, weekDays, weekStartOf, today } from '../lib/utils'
@@ -12,6 +12,11 @@ const TIER_OPTIONS: { value: ShiftTier; label: string }[] = [
   { value: 'peak', label: 'Cao điểm' },
   { value: 'normal', label: 'Thường' },
   { value: 'low', label: 'Thấp điểm' },
+]
+
+const AREA_OPTIONS: { value: 'room' | 'external'; label: string }[] = [
+  { value: 'room', label: 'Trực phòng' },
+  { value: 'external', label: 'Điểm bán ngoài' },
 ]
 
 /**
@@ -28,6 +33,7 @@ export function Schedule() {
   const updateShift = useStore((s) => s.updateShift)
   const deleteShift = useStore((s) => s.deleteShift)
   const [weekStart, setWeekStart] = useState(weekStartOf(today()))
+  const [area, setArea] = useState<'room' | 'external'>('room')
   const [openCell, setOpenCell] = useState<{ shiftId: string } | null>(null)
   const [formTarget, setFormTarget] = useState<{ date: string; shift?: ShiftInstance } | null>(null)
   const { ask, node } = useConfirm()
@@ -36,6 +42,12 @@ export function Schedule() {
   const memberMap = useMemo(
     () => Object.fromEntries(data.members.map((m) => [m.id, m])),
     [data.members],
+  )
+
+  /** Điểm bán ngoài trong tuần đang xem — khu vực riêng, không trộn vào lưới ca phòng. */
+  const weekEvents = useMemo(
+    () => data.events.filter((ev) => weekStartOf(ev.date) === weekStart).sort((a, b) => a.date.localeCompare(b.date)),
+    [data.events, weekStart],
   )
 
   const weekShifts = useMemo(
@@ -94,125 +106,174 @@ export function Schedule() {
         }
       />
 
-      {mode === 'draft' && (
-        <div className="mb-4">
-          <Badge tone="warn">Đã có ca — chưa xếp lịch. Vào "Xếp lịch tự động" khi sẵn sàng.</Badge>
-        </div>
-      )}
-      {mode === 'scheduled' && !published && (
-        <div className="mb-4">
-          <Badge tone="warn">Đây là bản nháp — chưa công bố cho thành viên</Badge>
-        </div>
-      )}
+      <div className="mb-5">
+        <Segmented options={AREA_OPTIONS} value={area} onChange={setArea} />
+      </div>
 
-      {mode === 'empty' ? (
-        <Card>
-          <EmptyState
-            icon={<LayoutGrid size={22} />}
-            title="Tuần này chưa có ca nào"
-            desc="Bấm '+ Thêm' bên dưới để tạo ca cho từng ngày, hoặc chuyển sang tuần khác."
-          />
-          <div className="grid grid-cols-2 gap-2 border-t border-ink-100 p-5 sm:grid-cols-4 lg:grid-cols-7">
-            {days.map((d) => (
-              <Button key={d} variant="outline" size="sm" onClick={() => openCreate(d)}>
-                <Plus size={13} /> {formatDateLong(d).slice(0, 5)}
-              </Button>
-            ))}
-          </div>
-        </Card>
+      {area === 'external' ? (
+        <>
+          {weekEvents.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<Store size={22} />}
+                title="Tuần này chưa có điểm bán ngoài nào"
+                desc="Tạo và quản lý ứng viên ở trang &quot;Điểm bán ngoài&quot;."
+              />
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 stagger">
+              {weekEvents.map((ev) => (
+                <Card key={ev.id} className="overflow-hidden">
+                  <CardHeader
+                    icon={<Store size={16} />}
+                    title={ev.name}
+                    desc={`${formatDateLong(ev.date)} · ${ev.start}–${ev.end}`}
+                    action={
+                      <Badge tone={ev.status === 'locked' ? 'success' : ev.status === 'done' ? 'neutral' : 'info'}>
+                        {ev.status === 'locked' ? 'Đã chốt' : ev.status === 'done' ? 'Hoàn tất' : 'Đang mở'}
+                      </Badge>
+                    }
+                  />
+                  <div className="space-y-2.5 border-t border-ink-100 px-5 py-4">
+                    <p className="flex items-center gap-1.5 text-[12px] text-ink-500">
+                      <MapPin size={12} /> {ev.location}
+                    </p>
+                    <p className="flex items-center gap-1.5 text-[12px] text-ink-500">
+                      <Users size={12} /> Cần <strong className="text-ink-800">{ev.needed}</strong> người ·{' '}
+                      {ev.selected.length} đã chọn
+                    </p>
+                    {ev.selected.length > 0 && (
+                      <AvatarStack members={ev.selected.map((id) => memberMap[id]).filter(Boolean)} max={6} size="sm" />
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <Card className="overflow-hidden animate-fade-up">
-          <div className="overflow-x-auto">
-            <div className="min-w-[880px]">
-              <div className="grid grid-cols-[108px_repeat(7,1fr)] border-b border-ink-100 bg-ink-50/60 px-3 py-2.5">
-                <div />
+        <>
+          {mode === 'draft' && (
+            <div className="mb-4">
+              <Badge tone="warn">Đã có ca — chưa xếp lịch. Vào "Xếp lịch tự động" khi sẵn sàng.</Badge>
+            </div>
+          )}
+          {mode === 'scheduled' && !published && (
+            <div className="mb-4">
+              <Badge tone="warn">Đây là bản nháp — chưa công bố cho thành viên</Badge>
+            </div>
+          )}
+
+          {mode === 'empty' ? (
+            <Card>
+              <EmptyState
+                icon={<LayoutGrid size={22} />}
+                title="Tuần này chưa có ca nào"
+                desc="Bấm '+ Thêm' bên dưới để tạo ca cho từng ngày, hoặc chuyển sang tuần khác."
+              />
+              <div className="grid grid-cols-2 gap-2 border-t border-ink-100 p-5 sm:grid-cols-4 lg:grid-cols-7">
                 {days.map((d) => (
-                  <DayHeader key={d} date={d} />
+                  <Button key={d} variant="outline" size="sm" onClick={() => openCreate(d)}>
+                    <Plus size={13} /> {formatDateLong(d).slice(0, 5)}
+                  </Button>
                 ))}
               </div>
-
-              {rows.map((shift) => (
-                <div
-                  key={shift.id}
-                  className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch border-b border-ink-50 px-3 py-2 last:border-0"
-                >
-                  <div className="flex items-center gap-1.5 pr-2">
-                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TIER_STYLE[shift.tier].dot)} />
-                    <div className="min-w-0">
-                      <p className="truncate text-[11.5px] font-bold text-ink-700">{shift.name}</p>
-                      <p className="truncate text-[9.5px] text-ink-400">
-                        {shift.start}–{shift.end}
-                      </p>
-                    </div>
+            </Card>
+          ) : (
+            <Card className="overflow-hidden animate-fade-up">
+              <div className="overflow-x-auto">
+                <div className="min-w-[880px]">
+                  <div className="grid grid-cols-[108px_repeat(7,1fr)] border-b border-ink-100 bg-ink-50/60 px-3 py-2.5">
+                    <div />
+                    {days.map((d) => (
+                      <DayHeader key={d} date={d} />
+                    ))}
                   </div>
 
-                  {days.map((d) => {
-                    if (d !== shift.date) {
-                      return <div key={d} className="mx-0.5 my-0.5 rounded-lg" />
-                    }
-                    const assigns = data.assignments.filter((a) => a.shiftId === shift.id && !a.isStandby)
-                    const members = assigns.map((a) => memberMap[a.memberId]).filter(Boolean)
-                    const lead = memberMap[assigns.find((a) => a.isLead)?.memberId ?? '']
-                    const under = isUnderStaffed(shift, data.assignments)
+                  {rows.map((shift) => (
+                    <div
+                      key={shift.id}
+                      className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch border-b border-ink-50 px-3 py-2 last:border-0"
+                    >
+                      <div className="flex items-center gap-1.5 pr-2">
+                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TIER_STYLE[shift.tier].dot)} />
+                        <div className="min-w-0">
+                          <p className="truncate text-[11.5px] font-bold text-ink-700">{shift.name}</p>
+                          <p className="truncate text-[9.5px] text-ink-400">
+                            {shift.start}–{shift.end}
+                          </p>
+                        </div>
+                      </div>
 
-                    return (
-                      <button
-                        key={d}
-                        onClick={() => setOpenCell({ shiftId: shift.id })}
-                        className={cn(
-                          'mx-0.5 my-0.5 flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
-                          under
-                            ? 'border-rose-200 bg-rose-50/60'
-                            : 'border-ink-100 bg-white hover:border-brand-200',
-                        )}
-                      >
-                        {mode === 'draft' ? (
-                          <Pencil size={13} className="text-ink-300" />
-                        ) : (
-                          <AvatarStack members={members} max={3} size="xs" />
-                        )}
-                        <div className="flex items-center gap-1">
-                          {lead && <Crown size={9} className="text-amber-500" />}
-                          <span
+                      {days.map((d) => {
+                        if (d !== shift.date) {
+                          return <div key={d} className="mx-0.5 my-0.5 rounded-lg" />
+                        }
+                        const assigns = data.assignments.filter((a) => a.shiftId === shift.id && !a.isStandby)
+                        const members = assigns.map((a) => memberMap[a.memberId]).filter(Boolean)
+                        const lead = memberMap[assigns.find((a) => a.isLead)?.memberId ?? '']
+                        const under = isUnderStaffed(shift, data.assignments)
+
+                        return (
+                          <button
+                            key={d}
+                            onClick={() => setOpenCell({ shiftId: shift.id })}
                             className={cn(
-                              'text-[10px] font-bold tabular-nums',
-                              under ? 'text-rose-600' : 'text-ink-500',
+                              'mx-0.5 my-0.5 flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
+                              under
+                                ? 'border-rose-200 bg-rose-50/60'
+                                : 'border-ink-100 bg-white hover:border-brand-200',
                             )}
                           >
-                            {presentCount(shift, data.assignments)}/{shift.minStaff}
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              ))}
-
-              {canEditShifts && (
-                <div className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch px-3 py-2">
-                  <div className="flex items-center pr-2 text-[10.5px] font-bold text-ink-300">Thêm ca</div>
-                  {days.map((d) => (
-                    <div key={d} className="mx-0.5 my-0.5 flex items-center justify-center">
-                      <button
-                        onClick={() => openCreate(d)}
-                        className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-ink-200 text-ink-300 transition-all duration-150 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
-                        aria-label={`Thêm ca ngày ${formatDateLong(d)}`}
-                      >
-                        <Plus size={14} />
-                      </button>
+                            {mode === 'draft' ? (
+                              <Pencil size={13} className="text-ink-300" />
+                            ) : (
+                              <AvatarStack members={members} max={3} size="xs" />
+                            )}
+                            <div className="flex items-center gap-1">
+                              {lead && <Crown size={9} className="text-amber-500" />}
+                              <span
+                                className={cn(
+                                  'text-[10px] font-bold tabular-nums',
+                                  under ? 'text-rose-600' : 'text-ink-500',
+                                )}
+                              >
+                                {presentCount(shift, data.assignments)}/{shift.minStaff}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
                     </div>
                   ))}
+
+                  {canEditShifts && (
+                    <div className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch px-3 py-2">
+                      <div className="flex items-center pr-2 text-[10.5px] font-bold text-ink-300">Thêm ca</div>
+                      {days.map((d) => (
+                        <div key={d} className="mx-0.5 my-0.5 flex items-center justify-center">
+                          <button
+                            onClick={() => openCreate(d)}
+                            className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-dashed border-ink-200 text-ink-300 transition-all duration-150 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                            aria-label={`Thêm ca ngày ${formatDateLong(d)}`}
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 px-5 py-3.5">
-            <TierLegend />
-            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-rose-500">
-              <span className="h-2 w-2 rounded-full bg-rose-400" /> Dưới định mức
-            </span>
-          </div>
-        </Card>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-100 px-5 py-3.5">
+                <TierLegend />
+                <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-rose-500">
+                  <span className="h-2 w-2 rounded-full bg-rose-400" /> Dưới định mức
+                </span>
+              </div>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Modal chi tiết 1 ca */}

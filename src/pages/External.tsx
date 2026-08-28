@@ -60,7 +60,7 @@ export function External() {
         {events.map((ev) => {
           const applied = ev.applicants.includes(user.id)
           const selected = ev.selected.includes(user.id)
-          const eligible = !!user.staff && user.staff.canTravel && user.staff.parentConsent && user.staff.reliability >= 80
+          const eligible = !!user.staff && user.staff.canTravel && user.staff.reliability >= 80
 
           return (
             <Card key={ev.id} hover className="flex flex-col overflow-hidden">
@@ -121,7 +121,7 @@ export function External() {
               {!isManager && !eligible && !selected && (
                 <p className="border-t border-ink-100 px-4 py-2.5 text-[11px] leading-relaxed text-amber-600">
                   <ShieldAlert size={11} className="mr-1 inline" />
-                  Cần: đồng ý phụ huynh + có thể di chuyển + điểm uy tín ≥80.
+                  Cần: có thể di chuyển + điểm uy tín ≥80.
                 </p>
               )}
             </Card>
@@ -161,7 +161,6 @@ function scoreOf(m: StaffMember, ev: ExternalEvent): number {
   let score = 0
   score += m.staff.reliability >= 90 ? 25 : m.staff.reliability >= 80 ? 18 : 8
   score += m.staff.canTravel ? 10 : 0
-  score += m.staff.parentConsent ? 0 : -100
   score += ev.applicants.length ? 5 : 0
   score += m.staff.skills.includes('cashier') || m.staff.skills.includes('sales') ? 15 : 5
   return score
