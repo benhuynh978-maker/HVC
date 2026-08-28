@@ -3,12 +3,11 @@ import type {
   Availability,
   ExternalEvent,
   Member,
-  ShiftDef,
   ShiftInstance,
   StaffMember,
 } from '../types'
-import { SHIFTS, SHIFT_MAP, TRAVEL_BUFFER_MIN } from '../data/config'
-import { dowOf, hasStaffProfile, minutesOf, shiftId, slotKey, uid, weekDays } from './utils'
+import { TIME_BLOCKS, TRAVEL_BUFFER_MIN } from '../data/config'
+import { dowOf, hasStaffProfile, minutesOf, overlaps, slotKey, uid } from './utils'
 
 /**
  * ============================================================
@@ -40,6 +39,12 @@ export interface SchedulerOptions {
   members: Member[]
   availability: Availability[]
   events: ExternalEvent[]
+  /**
+   * Các ca đã được Admin/Điều phối viên tạo sẵn cho tuần này (công cụ "+ Thêm"
+   * ở Lịch trực tuần). Không còn catalog cố định để tự sinh ca — thuật toán
+   * chỉ xếp NGƯỜI vào những ca đã tồn tại này.
+   */
+  existingShifts: ShiftInstance[]
   /** Điểm gánh nặng luỹ kế từ các tuần trước — giúp công bằng theo thời gian. */
   priorBurden?: Record<string, number>
   /** Ca của tuần trước, dạng memberId -> Set('dow-code') — phục vụ S3. */
@@ -85,7 +90,7 @@ export function effectiveSlots(
 export function blockedByEvent(
   memberId: string,
   date: string,
-  def: ShiftDef,
+  shift: Pick<ShiftInstance, 'start' | 'end'>,
   events: ExternalEvent[],
 ): ExternalEvent | null {
   for (const ev of events) {
@@ -94,13 +99,16 @@ export function blockedByEvent(
     if (!ev.selected.includes(memberId)) continue
     const evStart = minutesOf(ev.start) - TRAVEL_BUFFER_MIN
     const evEnd = minutesOf(ev.end) + TRAVEL_BUFFER_MIN
-    if (minutesOf(def.start) < evEnd && evStart < minutesOf(def.end)) return ev
+    if (minutesOf(shift.start) < evEnd && evStart < minutesOf(shift.end)) return ev
   }
   return null
 }
 
 /** H6 — thêm ca này có tạo ra khối làm việc liên tục quá 4 giờ không. */
-function breaksContinuityRule(existing: ShiftDef[], next: ShiftDef): boolean {
+function breaksContinuityRule(
+  existing: Pick<ShiftInstance, 'start' | 'end'>[],
+  next: Pick<ShiftInstance, 'start' | 'end'>,
+): boolean {
   const all = [...existing, next]
     .map((s) => [minutesOf(s.start), minutesOf(s.end)] as [number, number])
     .sort((a, b) => a[0] - b[0])
@@ -118,55 +126,64 @@ function breaksContinuityRule(existing: ShiftDef[], next: ShiftDef): boolean {
   return be - bs > 240
 }
 
+/**
+ * H1 — ca này có giao với ít nhất 1 khung giờ mà thành viên đã khai rảnh
+ * trong ngày đó không. Một ca có thể trải dài qua nhiều khung (vd 10h30–13h30
+ * chạm cả "sáng" lẫn "trưa") — chỉ cần giao với 1 khung đã khai là đủ.
+ */
+function freeForShift(slots: Set<string>, dow: number, shift: Pick<ShiftInstance, 'start' | 'end'>): boolean {
+  return TIME_BLOCKS.some(
+    (b) => slots.has(slotKey(dow, b.value)) && overlaps(shift.start, shift.end, b.start, b.end),
+  )
+}
+
 /** Danh sách ứng viên hợp lệ cho một ca (đã lọc toàn bộ ràng buộc cứng). */
 export function eligibleFor(
   date: string,
-  def: ShiftDef,
+  shift: ShiftInstance,
   members: StaffMember[],
   ctx: {
     availability: Availability[]
     events: ExternalEvent[]
     weekStart: string
     weekCount: Record<string, number>
-    dayShifts: Record<string, ShiftDef[]>
+    dayShifts: Record<string, ShiftInstance[]>
     alreadyIn: Set<string>
   },
 ): StaffMember[] {
   const dow = dowOf(date)
-  const key = slotKey(dow, def.code)
 
   return members.filter((m) => {
     if (!m.active) return false
     if (ctx.alreadyIn.has(m.id)) return false
     // H1
-    if (!effectiveSlots(m, ctx.weekStart, ctx.availability).has(key)) return false
+    if (!freeForShift(effectiveSlots(m, ctx.weekStart, ctx.availability), dow, shift)) return false
     // H4
     if ((ctx.weekCount[m.id] ?? 0) >= m.staff.maxShiftsPerWeek) return false
     // H3
-    if (blockedByEvent(m.id, date, def, ctx.events)) return false
+    if (blockedByEvent(m.id, date, shift, ctx.events)) return false
     // H6
     const dayKey = `${m.id}__${date}`
     const todayShifts = ctx.dayShifts[dayKey] ?? []
     if (todayShifts.length >= 2) return false
-    if (breaksContinuityRule(todayShifts, def)) return false
+    if (breaksContinuityRule(todayShifts, shift)) return false
     return true
   })
 }
 
 export function runScheduler(opts: SchedulerOptions): SchedulerResult {
-  const { weekStart, members, availability, events } = opts
+  const { weekStart, members, availability, events, existingShifts } = opts
   const priorBurden = opts.priorBurden ?? {}
   const lastWeekSlots = opts.lastWeekSlots ?? {}
 
   // H-ngầm định: chỉ thành viên có hồ sơ trực ca mới được xét — Trưởng ban/
   // Điều phối viên không có `.staff` nên bị loại ngay từ đây, không chỉ ở UI.
   const active = members.filter((m) => m.active).filter(hasStaffProfile)
-  const days = weekDays(weekStart)
 
   // Trạng thái đang xếp
   const weekCount: Record<string, number> = {}
   const burden: Record<string, number> = {}
-  const dayShifts: Record<string, ShiftDef[]> = {}
+  const dayShifts: Record<string, ShiftInstance[]> = {}
   const weekendCount: Record<string, number> = {}
   for (const m of active) {
     weekCount[m.id] = 0
@@ -174,34 +191,25 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
     weekendCount[m.id] = 0
   }
 
-  // 1) Sinh danh sách ca của tuần
-  const shifts: ShiftInstance[] = []
-  for (const date of days) {
-    const dow = dowOf(date)
-    for (const def of SHIFTS) {
-      if (!def.days.includes(dow)) continue
-      shifts.push({ id: shiftId(date, def.code), date, code: def.code, status: 'draft' })
-    }
-  }
+  // 1) Ca của tuần này đã được Admin/Điều phối viên tạo sẵn — không tự sinh nữa.
+  const shifts: ShiftInstance[] = existingShifts
 
   // 2) Đo độ khan hiếm: ca có ít ứng viên nhất được xếp trước
-  const scarcity = shifts.map((s) => {
-    const def = SHIFT_MAP[s.code]
-    const dow = dowOf(s.date)
-    const key = slotKey(dow, def.code)
+  const scarcity = shifts.map((shift) => {
+    const dow = dowOf(shift.date)
     const pool = active.filter(
       (m) =>
-        effectiveSlots(m, weekStart, availability).has(key) &&
-        !blockedByEvent(m.id, s.date, def, events),
+        freeForShift(effectiveSlots(m, weekStart, availability), dow, shift) &&
+        !blockedByEvent(m.id, shift.date, shift, events),
     ).length
-    return { shift: s, def, pool }
+    return { shift, pool }
   })
 
   scarcity.sort((a, b) => {
-    const ra = a.pool / (a.def.minStaff + a.def.standbyNeeded)
-    const rb = b.pool / (b.def.minStaff + b.def.standbyNeeded)
+    const ra = a.pool / (a.shift.minStaff + a.shift.standbyNeeded)
+    const rb = b.pool / (b.shift.minStaff + b.shift.standbyNeeded)
     if (ra !== rb) return ra - rb
-    if (a.def.tier !== b.def.tier) return a.def.tier === 'peak' ? -1 : 1
+    if (a.shift.tier !== b.shift.tier) return a.shift.tier === 'peak' ? -1 : 1
     return a.shift.date.localeCompare(b.shift.date)
   })
 
@@ -210,14 +218,14 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
   const notes: string[] = []
 
   // 3) Lấp từng ca
-  for (const { shift, def, pool } of scarcity) {
+  for (const { shift, pool } of scarcity) {
     const dow = dowOf(shift.date)
-    const need = def.minStaff + def.standbyNeeded
+    const need = shift.minStaff + shift.standbyNeeded
     const alreadyIn = new Set<string>()
     const chosen: StaffMember[] = []
 
     const takeOne = (filter?: (m: StaffMember) => boolean) => {
-      const cands = eligibleFor(shift.date, def, active, {
+      const cands = eligibleFor(shift.date, shift, active, {
         availability,
         events,
         weekStart,
@@ -234,13 +242,13 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
         let score = burden[m.id] / capacity
 
         // S3: hạn chế lặp lại đúng ca của tuần trước
-        if (lastWeekSlots[m.id]?.has(slotKey(dow, def.code))) score += 0.22
+        if (lastWeekSlots[m.id]?.has(slotKey(dow, shift.code))) score += 0.22
 
         // S6: hạn chế trực cả hai ngày cuối tuần
         if (dow >= 6 && weekendCount[m.id] > 0) score += 0.35
 
         // Ưu tiên nhẹ người có uy tín cao cho ca cao điểm
-        if (def.tier === 'peak') score -= (m.staff.reliability - 80) / 1000
+        if (shift.tier === 'peak') score -= (m.staff.reliability - 80) / 1000
 
         return { m, score }
       })
@@ -251,22 +259,22 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
       alreadyIn.add(picked.id)
       chosen.push(picked)
       weekCount[picked.id] = (weekCount[picked.id] ?? 0) + 1
-      burden[picked.id] = (burden[picked.id] ?? 0) + def.weight
+      burden[picked.id] = (burden[picked.id] ?? 0) + shift.weight
       if (dow >= 6) weekendCount[picked.id] = (weekendCount[picked.id] ?? 0) + 1
       const dayKey = `${picked.id}__${shift.date}`
-      dayShifts[dayKey] = [...(dayShifts[dayKey] ?? []), def]
+      dayShifts[dayKey] = [...(dayShifts[dayKey] ?? []), shift]
       return picked
     }
 
     // H7: ca cao điểm lấy trước 1 người có kinh nghiệm
-    if (def.tier === 'peak') takeOne((m) => m.staff.totalShiftsDone >= 3)
+    if (shift.tier === 'peak') takeOne((m) => m.staff.totalShiftsDone >= 3)
 
     while (chosen.length < need) {
       if (!takeOne()) break
     }
 
     // H5: gán ca trưởng — người trực chính có uy tín cao nhất
-    const mains = chosen.slice(0, def.minStaff)
+    const mains = chosen.slice(0, shift.minStaff)
     let leadId = ''
     if (mains.length) {
       const experienced = mains.filter((m) => m.staff.totalShiftsDone >= 3)
@@ -282,18 +290,18 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
         shiftId: shift.id,
         memberId: m.id,
         isLead: m.id === leadId,
-        isStandby: i >= def.minStaff,
+        isStandby: i >= shift.minStaff,
         confirmStatus: 'pending',
         attendance: 'none',
       })
     })
 
-    const missingMain = Math.max(0, def.minStaff - Math.min(chosen.length, def.minStaff))
+    const missingMain = Math.max(0, shift.minStaff - Math.min(chosen.length, shift.minStaff))
     if (missingMain > 0) {
       gaps.push({
         shiftId: shift.id,
         date: shift.date,
-        code: def.code,
+        code: shift.code,
         missing: missingMain,
         candidatePool: pool,
       })
@@ -301,7 +309,7 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
   }
 
   // 4) Thống kê
-  const totalSlots = shifts.reduce((n, s) => n + SHIFT_MAP[s.code].minStaff, 0)
+  const totalSlots = shifts.reduce((n, s) => n + s.minStaff, 0)
   const filledSlots = assignments.filter((a) => !a.isStandby).length
   const used = new Set(assignments.map((a) => a.memberId))
 
@@ -344,8 +352,7 @@ export function runScheduler(opts: SchedulerOptions): SchedulerResult {
  * Danh sách này được tính tự động, không ai phải lập thủ công.
  */
 export function standbyPoolFor(
-  date: string,
-  code: string,
+  shift: ShiftInstance,
   members: Member[],
   availability: Availability[],
   assignments: Assignment[],
@@ -353,19 +360,13 @@ export function standbyPoolFor(
   events: ExternalEvent[],
   weekStart: string,
 ): Member[] {
-  const def = SHIFT_MAP[code]
-  if (!def) return []
-  const dow = dowOf(date)
-  const key = slotKey(dow, code)
-  const sid = shiftId(date, code)
+  const dow = dowOf(shift.date)
 
   // Những người đã bận vì một ca trùng giờ trong cùng ngày
   const busy = new Set<string>()
   for (const s of shifts) {
-    if (s.date !== date) continue
-    const d2 = SHIFT_MAP[s.code]
-    if (!d2) continue
-    const clash = minutesOf(d2.start) < minutesOf(def.end) && minutesOf(def.start) < minutesOf(d2.end)
+    if (s.date !== shift.date) continue
+    const clash = minutesOf(s.start) < minutesOf(shift.end) && minutesOf(shift.start) < minutesOf(s.end)
     if (!clash) continue
     for (const a of assignments) {
       if (a.shiftId === s.id && a.confirmStatus !== 'declined') busy.add(a.memberId)
@@ -373,7 +374,7 @@ export function standbyPoolFor(
   }
   // Người vừa từ chối chính ca này thì không đưa trở lại pool
   for (const a of assignments) {
-    if (a.shiftId === sid && a.confirmStatus === 'declined') busy.add(a.memberId)
+    if (a.shiftId === shift.id && a.confirmStatus === 'declined') busy.add(a.memberId)
   }
 
   return members.filter(
@@ -381,7 +382,7 @@ export function standbyPoolFor(
       m.active &&
       m.staff && // Trưởng ban/Điều phối viên không có hồ sơ trực ca — loại khỏi pool
       !busy.has(m.id) &&
-      effectiveSlots(m, weekStart, availability).has(key) &&
-      !blockedByEvent(m.id, date, def, events),
+      freeForShift(effectiveSlots(m, weekStart, availability), dow, shift) &&
+      !blockedByEvent(m.id, shift.date, shift, events),
   )
 }

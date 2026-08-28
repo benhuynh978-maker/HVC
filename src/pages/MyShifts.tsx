@@ -11,29 +11,15 @@ import {
 import { useStore } from '../store/useStore'
 import { Badge, Button, Callout, Card, CardHeader, EmptyState, Modal, PageHeader } from '../components/ui'
 import { DayHeader, ScoreRing, ShiftTag, TierLegend, WeekNav } from '../components/shared'
-import {
-  ATTENDANCE_LABEL,
-  ATTENDANCE_STYLE,
-  CONFIRM_DEADLINE_HOUR,
-  SHIFTS,
-  SHIFT_MAP,
-  TIER_STYLE,
-} from '../data/config'
-import {
-  cn,
-  dowOf,
-  formatDateLong,
-  parseShiftId,
-  relativeDayLabel,
-  today,
-  weekDays,
-  weekStartOf,
-} from '../lib/utils'
-import type { Assignment } from '../types'
+import { ATTENDANCE_LABEL, ATTENDANCE_STYLE, CONFIRM_DEADLINE_HOUR, TIER_STYLE } from '../data/config'
+import { cn, formatDateLong, relativeDayLabel, today, weekDays, weekStartOf } from '../lib/utils'
+import type { Assignment, ShiftInstance } from '../types'
 
 /**
  * "Ca của tôi" — bảng lưới Ngày × Ca giống cấu trúc "Lịch trực tuần", nhưng
  * CHỈ hiển thị ca của chính người đăng nhập — không hiện tên/avatar ai khác.
+ * Hàng động: chỉ hiện những ca mà CHÍNH MÌNH có mặt trong tuần đang xem, để
+ * không lộ sự tồn tại của ca người khác qua một hàng trống.
  * Đây vẫn là nơi thực thi cơ chế XÁC NHẬN D-1 (mục 3.5 của kế hoạch), giờ
  * kích hoạt bằng cách bấm vào ô của mình thay vì một hàng trong danh sách.
  */
@@ -47,43 +33,55 @@ export function MyShifts() {
   const [weekStart, setWeekStart] = useState(weekStartOf(t))
   const days = weekDays(weekStart)
 
-  const [openCell, setOpenCell] = useState<{ date: string; code: string } | null>(null)
+  const [openCell, setOpenCell] = useState<{ shiftId: string } | null>(null)
   const [declineTarget, setDeclineTarget] = useState<Assignment | null>(null)
   const [reason, setReason] = useState('')
+
+  const shiftMap = useMemo(
+    () => Object.fromEntries(data.shifts.map((s) => [s.id, s])),
+    [data.shifts],
+  )
 
   /** Toàn bộ ca sắp tới của tôi (không giới hạn theo tuần đang xem) — phục vụ banner nhắc hạn. */
   const mine = useMemo(() => {
     return data.assignments
       .filter((a) => a.memberId === user.id)
-      .map((a) => ({ a, ...parseShiftId(a.shiftId) }))
-      .filter((x) => x.date >= t)
-      .sort((x, y) => x.date.localeCompare(y.date))
-  }, [data.assignments, user.id, t])
+      .map((a) => ({ a, shift: shiftMap[a.shiftId] }))
+      .filter((x) => x.shift && x.shift.date >= t)
+      .sort((x, y) => x.shift.date.localeCompare(y.shift.date))
+  }, [data.assignments, shiftMap, user.id, t])
 
   const needsConfirm = mine.filter((x) => x.a.confirmStatus === 'pending')
 
-  /** Tra cứu nhanh: ca của tôi tại 1 ô Ngày×Mã ca, trong toàn bộ dữ liệu (không chỉ tuần đang xem). */
-  const myAssignmentAt = (date: string, code: string) =>
-    data.assignments.find(
-      (a) => a.memberId === user.id && a.shiftId === `${date}__${code}` && a.confirmStatus !== 'declined',
-    ) ??
-    // Vẫn hiện được ca đã báo không trực, để không "biến mất" khỏi lưới của chính mình
-    data.assignments.find((a) => a.memberId === user.id && a.shiftId === `${date}__${code}`)
-
-  const weekHasAny = days.some((d) => SHIFTS.some((def) => myAssignmentAt(d, def.code)))
+  /** Ca của tôi trong tuần đang xem — chỉ hàng nào có mặt mới hiện, sắp theo giờ bắt đầu. */
+  const myWeekRows = useMemo(() => {
+    const rows: { shift: ShiftInstance; a: Assignment }[] = []
+    for (const s of data.shifts) {
+      if (weekStartOf(s.date) !== weekStart) continue
+      const a =
+        data.assignments.find(
+          (x) => x.memberId === user.id && x.shiftId === s.id && x.confirmStatus !== 'declined',
+        ) ?? data.assignments.find((x) => x.memberId === user.id && x.shiftId === s.id)
+      if (a) rows.push({ shift: s, a })
+    }
+    return rows.sort((x, y) => x.shift.start.localeCompare(y.shift.start) || x.shift.date.localeCompare(y.shift.date))
+  }, [data.shifts, data.assignments, user.id, weekStart])
 
   const hourNow = new Date().getHours()
   const deadlinePassed = hourNow >= CONFIRM_DEADLINE_HOUR
 
-  const openDetail = (date: string, code: string) => {
-    setWeekStart(weekStartOf(date))
-    setOpenCell({ date, code })
+  const openDetail = (shiftId: string) => {
+    const shift = shiftMap[shiftId]
+    if (shift) setWeekStart(weekStartOf(shift.date))
+    setOpenCell({ shiftId })
   }
 
-  const detailAssignment = openCell ? myAssignmentAt(openCell.date, openCell.code) : undefined
-  const detailDef = openCell ? SHIFT_MAP[openCell.code] : undefined
-  const isToday = openCell?.date === t
-  const isPast = !!openCell && openCell.date < t
+  const detailShift = openCell ? shiftMap[openCell.shiftId] : undefined
+  const detailAssignment = openCell
+    ? myWeekRows.find((r) => r.shift.id === openCell.shiftId)?.a
+    : undefined
+  const isToday = detailShift?.date === t
+  const isPast = !!detailShift && detailShift.date < t
 
   const openDecline = (a: Assignment) => {
     setOpenCell(null)
@@ -123,9 +121,9 @@ export function MyShifts() {
             xác minh.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {needsConfirm.map(({ a, date, code }) => (
-              <button key={a.id} data-testid="my-shift-banner-chip" onClick={() => openDetail(date, code)} className="cursor-pointer">
-                <ShiftTag code={code} />
+            {needsConfirm.map(({ a, shift }) => (
+              <button key={a.id} data-testid="my-shift-banner-chip" onClick={() => openDetail(shift.id)} className="cursor-pointer">
+                <ShiftTag shift={shift} />
               </button>
             ))}
           </div>
@@ -135,63 +133,64 @@ export function MyShifts() {
       <Card className="overflow-hidden animate-fade-up">
         <CardHeader
           title={`Tuần ${formatDateLong(weekStart)} – ${formatDateLong(days[6])}`}
-          desc={weekHasAny ? 'Bấm vào ô có màu để xem chi tiết và xác nhận' : 'Bạn không có ca nào trong tuần này'}
+          desc={myWeekRows.length ? 'Bấm vào ô có màu để xem chi tiết và xác nhận' : 'Bạn không có ca nào trong tuần này'}
           action={<WeekNav weekStart={weekStart} onChange={setWeekStart} />}
         />
-        <div className="overflow-x-auto border-t border-ink-100">
-          <div className="min-w-[880px]">
-            <div className="grid grid-cols-[108px_repeat(7,1fr)] border-b border-ink-100 bg-ink-50/60 px-3 py-2.5">
-              <div />
-              {days.map((d) => (
-                <DayHeader key={d} date={d} />
+        {myWeekRows.length === 0 ? (
+          <div className="border-t border-ink-100" />
+        ) : (
+          <div className="overflow-x-auto border-t border-ink-100">
+            <div className="min-w-[880px]">
+              <div className="grid grid-cols-[108px_repeat(7,1fr)] border-b border-ink-100 bg-ink-50/60 px-3 py-2.5">
+                <div />
+                {days.map((d) => (
+                  <DayHeader key={d} date={d} />
+                ))}
+              </div>
+
+              {myWeekRows.map(({ shift, a }) => (
+                <div
+                  key={shift.id}
+                  className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch border-b border-ink-50 px-3 py-2 last:border-0"
+                >
+                  <div className="flex items-center gap-1.5 pr-2">
+                    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TIER_STYLE[shift.tier].dot)} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[11.5px] font-bold text-ink-700">{shift.name}</p>
+                      <p className="truncate text-[9.5px] text-ink-400">
+                        {shift.start}–{shift.end}
+                      </p>
+                    </div>
+                  </div>
+
+                  {days.map((d) => {
+                    if (d !== shift.date) {
+                      return <div key={d} className="mx-0.5 my-0.5 rounded-lg" />
+                    }
+
+                    const dayIsPast = d < t
+                    const icon = dayIsPast ? attendanceIcon(a) : confirmIcon(a)
+
+                    return (
+                      <button
+                        key={d}
+                        data-testid="my-shift-cell"
+                        onClick={() => openDetail(shift.id)}
+                        className={cn(
+                          'mx-0.5 my-0.5 flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
+                          TIER_STYLE[shift.tier].chip,
+                        )}
+                      >
+                        {a.isLead && <Crown size={10} className="text-amber-500" />}
+                        {icon}
+                      </button>
+                    )
+                  })}
+                </div>
               ))}
             </div>
-
-            {SHIFTS.map((def) => (
-              <div
-                key={def.code}
-                className="grid grid-cols-[108px_repeat(7,1fr)] items-stretch border-b border-ink-50 px-3 py-2 last:border-0"
-              >
-                <div className="flex items-center gap-1.5 pr-2">
-                  <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TIER_STYLE[def.tier].dot)} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[11.5px] font-bold text-ink-700">{def.code}</p>
-                    <p className="truncate text-[9.5px] text-ink-400">
-                      {def.start}–{def.end}
-                    </p>
-                  </div>
-                </div>
-
-                {days.map((d) => {
-                  const applicable = def.days.includes(dowOf(d))
-                  const a = applicable ? myAssignmentAt(d, def.code) : undefined
-
-                  if (!applicable || !a) {
-                    return <div key={d} className="mx-0.5 my-0.5 rounded-lg" />
-                  }
-
-                  const dayIsPast = d < t
-                  const icon = dayIsPast ? attendanceIcon(a) : confirmIcon(a)
-
-                  return (
-                    <button
-                      key={d}
-                      data-testid="my-shift-cell"
-                      onClick={() => openDetail(d, def.code)}
-                      className={cn(
-                        'mx-0.5 my-0.5 flex flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-sm',
-                        TIER_STYLE[def.tier].chip,
-                      )}
-                    >
-                      {a.isLead && <Crown size={10} className="text-amber-500" />}
-                      {icon}
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
           </div>
-        </div>
+        )}
         <div className="border-t border-ink-100 px-5 py-3.5">
           <TierLegend />
         </div>
@@ -211,13 +210,13 @@ export function MyShifts() {
       <Modal
         open={!!openCell}
         onClose={() => setOpenCell(null)}
-        title={openCell ? `Ca ${openCell.code} · ${relativeDayLabel(openCell.date)}` : ''}
-        desc={detailDef ? `${detailDef.name} · ${formatDateLong(openCell!.date)}` : ''}
+        title={detailShift ? `${detailShift.name} · ${relativeDayLabel(detailShift.date)}` : ''}
+        desc={detailShift ? formatDateLong(detailShift.date) : ''}
       >
-        {detailAssignment && (
+        {detailAssignment && detailShift && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <ShiftTag code={openCell!.code} />
+              <ShiftTag shift={detailShift} />
               {detailAssignment.isLead && (
                 <Badge tone="warn">
                   <Crown size={11} /> Ca trưởng
@@ -272,12 +271,12 @@ export function MyShifts() {
           </>
         }
       >
-        {declineTarget && (
+        {declineTarget && shiftMap[declineTarget.shiftId] && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <ShiftTag code={parseShiftId(declineTarget.shiftId).code} />
+              <ShiftTag shift={shiftMap[declineTarget.shiftId]} />
               <span className="text-[13px] font-semibold text-ink-600">
-                {relativeDayLabel(parseShiftId(declineTarget.shiftId).date)}
+                {relativeDayLabel(shiftMap[declineTarget.shiftId].date)}
               </span>
             </div>
             <div>

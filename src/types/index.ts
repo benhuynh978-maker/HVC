@@ -14,6 +14,10 @@ export type Skill = 'cashier' | 'sales' | 'logistics' | 'media'
 /** Tầng ca theo nhu cầu thực tế: cao điểm / thường / thấp điểm. */
 export type ShiftTier = 'peak' | 'normal' | 'low'
 
+/** Khung giờ trong ngày — dùng để thành viên khai lịch rảnh khi ca không còn cố định. */
+export type TimeBlock = 'morning' | 'midday' | 'afternoon' | 'evening'
+
+/** Field dùng chung mô tả một ca — không còn là catalog cố định, mỗi ShiftInstance tự mang bộ field này. */
 export interface ShiftDef {
   code: string
   name: string
@@ -22,11 +26,9 @@ export interface ShiftDef {
   tier: ShiftTier
   /** Số người trực chính tối thiểu. */
   minStaff: number
-  /** Số người dự bị tại chỗ cần có (ca thấp điểm). */
+  /** Số người dự bị tại chỗ cần có. */
   standbyNeeded: number
-  /** Các thứ trong tuần áp dụng ca này (1 = Thứ 2 … 7 = Chủ nhật). */
-  days: number[]
-  /** Hệ số điểm gánh nặng. */
+  /** Hệ số điểm gánh nặng — tự tính từ số giờ và tầng ca. */
   weight: number
   hours: number
 }
@@ -84,10 +86,15 @@ export interface Availability {
 
 export type ShiftStatus = 'draft' | 'published'
 
-export interface ShiftInstance {
+/**
+ * Một ca cụ thể, riêng cho đúng 1 ngày — do Admin/Điều phối viên tự tạo bằng
+ * công cụ "+ Thêm" ở Lịch trực tuần. Không còn catalog cố định lặp lại mỗi
+ * tuần (SHIFTS/SHIFT_MAP cũ) — mọi field định nghĩa ca nằm ngay trên instance
+ * này, nên chỉ cần đọc thẳng `shift.name`/`shift.start`... ở nơi dùng.
+ */
+export interface ShiftInstance extends ShiftDef {
   id: string
   date: string
-  code: string
   status: ShiftStatus
 }
 

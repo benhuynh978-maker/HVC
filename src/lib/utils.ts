@@ -1,5 +1,4 @@
 import clsx, { type ClassValue } from 'clsx'
-import { SHIFT_MAP } from '../data/config'
 import type { Member, Role, StaffProfile } from '../types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -114,11 +113,6 @@ export function parseShiftId(id: string) {
 
 export function slotKey(dow: number, code: string) {
   return `${dow}-${code}`
-}
-
-export function shiftLabel(code: string) {
-  const s = SHIFT_MAP[code]
-  return s ? `${s.code} · ${s.start}–${s.end}` : code
 }
 
 export function minutesOf(hhmm: string): number {

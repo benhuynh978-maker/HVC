@@ -1,13 +1,22 @@
 import { create } from 'zustand'
-import type { AppData, Assignment, AttendanceStatus, LogEntry, Member, SwapRequest } from '../types'
+import type {
+  AppData,
+  Assignment,
+  AttendanceStatus,
+  LogEntry,
+  Member,
+  ShiftTier,
+  SwapRequest,
+} from '../types'
 import { clearSession, db, loadOrSeed, readSession, resetToSeed, saveSession } from '../lib/db'
 import { runScheduler, standbyPoolFor } from '../lib/scheduler'
 import { computeBurden } from '../lib/metrics'
-import { PICKUP_BONUS, RELIABILITY_DELTA, SHIFT_MAP } from '../data/config'
+import { PICKUP_BONUS, RELIABILITY_DELTA, WEIGHT_PER_HOUR } from '../data/config'
 import {
   addDays,
   clamp,
   dowOf,
+  minutesOf,
   parseShiftId,
   shiftId as makeShiftId,
   slotKey,
@@ -62,12 +71,23 @@ interface Store {
   publishWeek: (weekStart: string) => void
   clearWeek: (weekStart: string) => void
 
+  /* Ca — Admin/Điều phối viên tự tạo cho từng ngày (thay catalog cố định cũ) */
+  createShift: (
+    date: string,
+    input: { name: string; start: string; end: string; tier: ShiftTier; minStaff: number },
+  ) => void
+  updateShift: (
+    shiftId: string,
+    input: Partial<{ name: string; start: string; end: string; tier: ShiftTier; minStaff: number }>,
+  ) => void
+  deleteShift: (shiftId: string) => void
+
   /* Xác nhận D-1 */
   confirmAssignment: (assignmentId: string) => void
   declineAssignment: (assignmentId: string, reason: string) => void
 
   /* Đổi ca & dự bị */
-  standbyPool: (date: string, code: string) => Member[]
+  standbyPool: (shiftId: string) => Member[]
   claimShift: (shiftId: string, memberId: string, swapId?: string) => void
   requestSwap: (assignmentId: string, reason: string) => void
   resolveSwap: (swapId: string, status: 'approved' | 'rejected' | 'cancelled') => void
@@ -200,26 +220,25 @@ export const useStore = create<Store>((set, get) => ({
       }
     }
 
+    // Ca của tuần này do Admin/Điều phối viên đã tự tạo sẵn — thuật toán chỉ xếp người vào.
+    const existingShifts = data.shifts.filter((s) => weekStartOf(s.date) === weekStart)
+
     const result = runScheduler({
       weekStart,
       members: data.members,
       availability: data.availability,
       events: data.events,
+      existingShifts,
       priorBurden: computeBurden(data, prevWeek),
       lastWeekSlots,
     })
 
-    const keepShiftIds = new Set(
-      data.shifts.filter((s) => weekStartOf(s.date) === weekStart).map((s) => s.id),
-    )
+    const keepShiftIds = new Set(existingShifts.map((s) => s.id))
 
     set((s) => ({
       data: {
         ...s.data,
-        shifts: [
-          ...s.data.shifts.filter((x) => weekStartOf(x.date) !== weekStart),
-          ...result.shifts,
-        ],
+        // Bản thân danh sách ca không đổi (đã tồn tại từ trước) — chỉ ghi đè lượt phân công.
         assignments: [
           ...s.data.assignments.filter((a) => !keepShiftIds.has(a.shiftId)),
           ...result.assignments,
@@ -268,6 +287,71 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   /* ---------------------------------------------------------------- */
+  createShift(date, input) {
+    const hours = Math.max(0, (minutesOf(input.end) - minutesOf(input.start)) / 60)
+    const code = uid('s')
+    const shift = {
+      id: makeShiftId(date, code),
+      date,
+      code,
+      name: input.name.trim() || 'Ca chưa đặt tên',
+      start: input.start,
+      end: input.end,
+      tier: input.tier,
+      minStaff: Math.max(1, input.minStaff),
+      standbyNeeded: 0,
+      hours,
+      weight: hours * WEIGHT_PER_HOUR[input.tier],
+      status: 'draft' as const,
+    }
+    set((s) => ({ data: { ...s.data, shifts: [...s.data.shifts, shift] } }))
+    get().persist()
+    get().toast({ kind: 'success', title: 'Đã tạo ca mới', desc: `${shift.name} · ${shift.start}–${shift.end}` })
+  },
+
+  updateShift(shiftId, input) {
+    set((s) => ({
+      data: {
+        ...s.data,
+        shifts: s.data.shifts.map((x) => {
+          if (x.id !== shiftId) return x
+          const start = input.start ?? x.start
+          const end = input.end ?? x.end
+          const tier = input.tier ?? x.tier
+          const hours = Math.max(0, (minutesOf(end) - minutesOf(start)) / 60)
+          return {
+            ...x,
+            name: input.name?.trim() || x.name,
+            start,
+            end,
+            tier,
+            minStaff: input.minStaff !== undefined ? Math.max(1, input.minStaff) : x.minStaff,
+            hours,
+            weight: hours * WEIGHT_PER_HOUR[tier],
+          }
+        }),
+      },
+    }))
+    get().persist()
+    get().toast({ kind: 'success', title: 'Đã cập nhật ca' })
+  },
+
+  deleteShift(shiftId) {
+    const hasAssignments = get().data.assignments.some((a) => a.shiftId === shiftId)
+    if (hasAssignments) {
+      get().toast({
+        kind: 'error',
+        title: 'Không thể xoá ca này',
+        desc: 'Ca đã có người được phân công — chỉ có thể xoá ca chưa xếp lịch.',
+      })
+      return
+    }
+    set((s) => ({ data: { ...s.data, shifts: s.data.shifts.filter((x) => x.id !== shiftId) } }))
+    get().persist()
+    get().toast({ kind: 'info', title: 'Đã xoá ca' })
+  },
+
+  /* ---------------------------------------------------------------- */
   confirmAssignment(assignmentId) {
     set((s) => ({
       data: {
@@ -311,7 +395,7 @@ export const useStore = create<Store>((set, get) => ({
     get().persist()
 
     const { date, code } = parseShiftId(a.shiftId)
-    const pool = get().standbyPool(date, code)
+    const pool = get().standbyPool(a.shiftId)
     get().log(
       'warn',
       `${member?.name ?? 'Thành viên'} báo không trực được ca ${code} ngày ${date}. Đã mở cho ${pool.length} người dự bị.`,
@@ -325,17 +409,18 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   /* ---------------------------------------------------------------- */
-  standbyPool(date, code) {
+  standbyPool(shiftId) {
     const { data } = get()
+    const shift = data.shifts.find((s) => s.id === shiftId)
+    if (!shift) return []
     return standbyPoolFor(
-      date,
-      code,
+      shift,
       data.members,
       data.availability,
       data.assignments,
       data.shifts,
       data.events,
-      weekStartOf(date),
+      weekStartOf(shift.date),
     )
   },
 
@@ -343,7 +428,6 @@ export const useStore = create<Store>((set, get) => ({
     const { data } = get()
     const shift = data.shifts.find((s) => s.id === shiftId)
     if (!shift) return
-    const def = SHIFT_MAP[shift.code]
     const member = data.members.find((m) => m.id === memberId)
     if (!member) return
 
@@ -387,7 +471,7 @@ export const useStore = create<Store>((set, get) => ({
     get().persist()
     get().log(
       'success',
-      `${member.name} đã nhận ca ${def?.code ?? shift.code} ngày ${shift.date} từ danh sách dự bị (+${PICKUP_BONUS} điểm uy tín).`,
+      `${member.name} đã nhận ca ${shift.name} ngày ${shift.date} từ danh sách dự bị (+${PICKUP_BONUS} điểm uy tín).`,
       memberId,
     )
     get().toast({
@@ -542,11 +626,11 @@ export const useStore = create<Store>((set, get) => ({
     const released: { memberId: string; shiftId: string }[] = []
     const keptAssignments: Assignment[] = []
     const newSwaps: SwapRequest[] = []
+    const shiftMap = Object.fromEntries(data.shifts.map((s) => [s.id, s]))
 
     for (const a of data.assignments) {
-      const { date, code } = parseShiftId(a.shiftId)
-      const def = SHIFT_MAP[code]
-      if (!def || date !== ev.date || !ev.selected.includes(a.memberId)) {
+      const def = shiftMap[a.shiftId]
+      if (!def || def.date !== ev.date || !ev.selected.includes(a.memberId)) {
         keptAssignments.push(a)
         continue
       }

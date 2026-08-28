@@ -12,7 +12,7 @@ import {
 import { useStore } from '../store/useStore'
 import { Callout, Card, CardHeader, EmptyState, PageHeader, Segmented } from '../components/ui'
 import { AvatarStack, ShiftTag, WeekNav } from '../components/shared'
-import { ATTENDANCE_LABEL, ATTENDANCE_STYLE, RELIABILITY_DELTA, SHIFT_MAP } from '../data/config'
+import { ATTENDANCE_LABEL, ATTENDANCE_STYLE, RELIABILITY_DELTA } from '../data/config'
 import { cn, formatDateLong, today, weekDays, weekStartOf } from '../lib/utils'
 import type { AttendanceStatus } from '../types'
 
@@ -51,14 +51,13 @@ export function Attendance() {
     return data.shifts
       .filter((s) => targetDates.includes(s.date) && s.status === 'published')
       .map((s) => {
-        const def = SHIFT_MAP[s.code]
         const list = data.assignments
           .filter((a) => a.shiftId === s.id && a.confirmStatus !== 'declined')
           .map((a) => ({ a, member: memberMap[a.memberId] }))
           .filter((x) => x.member)
-        return { shift: s, def, list }
+        return { shift: s, list }
       })
-      .sort((a, b) => (a.shift.date + a.def.start).localeCompare(b.shift.date + b.def.start))
+      .sort((a, b) => (a.shift.date + a.shift.start).localeCompare(b.shift.date + b.shift.start))
   }, [data.shifts, data.assignments, memberMap, scope, date, days])
 
   const canEdit = isManager
@@ -125,11 +124,11 @@ export function Attendance() {
           </Card>
         )}
 
-        {rows.map(({ shift, def, list }) => (
+        {rows.map(({ shift, list }) => (
           <Card key={shift.id} className="overflow-hidden animate-fade-up">
             <CardHeader
-              icon={<ShiftTag code={shift.code} showTime={false} />}
-              title={`${def.name} · ${def.start}–${def.end}`}
+              icon={<ShiftTag shift={shift} showTime={false} />}
+              title={`${shift.name} · ${shift.start}–${shift.end}`}
               desc={`${formatDateLong(shift.date)} · ${list.length} người được phân công`}
             />
             <div className="divide-y divide-ink-100 border-t border-ink-100">

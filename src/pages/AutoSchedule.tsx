@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
+  ArrowRight,
+  CalendarPlus,
   CheckCircle2,
   Gauge,
   Loader2,
@@ -48,15 +51,20 @@ export function AutoSchedule() {
     [data.members],
   )
 
-  // Mặc định mở ngay tuần gần nhất còn chưa có lịch, để vào trang là thấy
-  // việc cần làm — không phải tự tìm tuần trống bằng cách bấm chuyển tuần.
+  // Mặc định mở ngay tuần gần nhất ĐÃ CÓ CA (do Admin tạo ở "Lịch trực tuần")
+  // nhưng CHƯA xếp người — đó là việc thật sự cần làm ở trang này. Nếu không
+  // có tuần nào như vậy trong 12 tuần tới, mở tuần này để Admin biết cần
+  // sang "Lịch trực tuần" tạo ca trước.
   const firstUnscheduledWeek = useMemo(() => {
     let w = weekStartOf(today())
     for (let i = 0; i < 12; i++) {
-      if (!data.shifts.some((s) => weekStartOf(s.date) === w)) return w
+      const shiftsOfW = data.shifts.filter((s) => weekStartOf(s.date) === w)
+      const idsOfW = new Set(shiftsOfW.map((s) => s.id))
+      const scheduledOfW = data.assignments.some((a) => idsOfW.has(a.shiftId))
+      if (shiftsOfW.length > 0 && !scheduledOfW) return w
       w = addDays(w, 7)
     }
-    return w
+    return weekStartOf(today())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -65,10 +73,12 @@ export function AutoSchedule() {
   const [running, setRunning] = useState(false)
   const { ask, node } = useConfirm()
 
-  const hasDraft = data.shifts.some((s) => weekStartOf(s.date) === weekStart)
-  const isPublished = data.shifts.some(
-    (s) => weekStartOf(s.date) === weekStart && s.status === 'published',
-  )
+  const weekShifts = data.shifts.filter((s) => weekStartOf(s.date) === weekStart)
+  const weekShiftIds = new Set(weekShifts.map((s) => s.id))
+  const hasShifts = weekShifts.length > 0
+  const hasAssignments = data.assignments.some((a) => weekShiftIds.has(a.shiftId))
+  const hasDraft = hasShifts && hasAssignments
+  const isPublished = weekShifts.some((s) => s.status === 'published')
 
   const run = () => {
     setRunning(true)
@@ -162,7 +172,9 @@ export function AutoSchedule() {
                     ? 'Lịch tuần này đã được công bố.'
                     : hasDraft
                       ? 'Đang có bản nháp — rà soát bên dưới rồi công bố khi sẵn sàng.'
-                      : 'Chưa có lịch cho tuần này. Chạy thuật toán để tạo bản nháp trong vài giây.'}
+                      : hasShifts
+                        ? `Tuần này đã có ${weekShifts.length} ca — chạy thuật toán để xếp người vào.`
+                        : 'Tuần này chưa có ca nào. Sang "Lịch trực tuần" để tạo ca trước khi xếp lịch.'}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -171,13 +183,27 @@ export function AutoSchedule() {
                     <Trash2 size={15} /> Xoá nháp
                   </Button>
                 )}
-                <Button onClick={run} disabled={running || isPublished}>
+                <Button onClick={run} disabled={running || isPublished || !hasShifts}>
                   {running ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
                   {hasDraft ? 'Chạy lại' : 'Xếp lịch tự động'}
                 </Button>
               </div>
             </div>
           </Card>
+
+          {!hasShifts && !isPublished && (
+            <Callout tone="brand" icon={<CalendarPlus size={14} />} title="Chưa có ca nào để xếp">
+              Ca không còn tạo tự động theo mẫu cố định — hãy sang "Lịch trực tuần" để tạo ca riêng
+              cho từng ngày trong tuần này trước.
+              <div className="mt-2.5">
+                <Link to="/schedule">
+                  <Button size="sm" variant="outline">
+                    Sang "Lịch trực tuần" <ArrowRight size={13} />
+                  </Button>
+                </Link>
+              </div>
+            </Callout>
+          )}
 
           {result && (
             <>

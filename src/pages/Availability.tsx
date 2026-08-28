@@ -2,8 +2,8 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CalendarRange, CheckCircle2, Info, Save, Sparkles } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { Badge, Button, Callout, Card, CardHeader, PageHeader } from '../components/ui'
-import { TierLegend, WeekNav } from '../components/shared'
-import { AVAILABILITY_RATIO, DAY_LABELS, SHIFTS, TIER_STYLE } from '../data/config'
+import { WeekNav } from '../components/shared'
+import { AVAILABILITY_RATIO, DAY_LABELS, TIME_BLOCKS } from '../data/config'
 import { cn, dowOf, formatDateLong, slotKey, weekDays, weekStartOf, today } from '../lib/utils'
 
 /**
@@ -12,6 +12,11 @@ import { cn, dowOf, formatDateLong, slotKey, weekDays, weekStartOf, today } from
  *  · Lớp ROLLING: bản ghi Availability theo từng tuần — đây là màn hình này.
  * Nếu tuần chưa được cập nhật, lưới hiển thị sẵn lịch nền để người dùng
  * chỉ cần sửa phần khác biệt (đúng như quy trình "60 giây/tuần" trong bài làm).
+ *
+ * Không còn khai theo mã ca cố định (A/B/C...) — Admin giờ tự tạo ca riêng
+ * cho từng ngày, nên lịch rảnh chuyển sang khai theo 4 KHUNG GIỜ trong ngày
+ * (Sáng/Trưa/Chiều/Tối). Hệ thống tự so ca cụ thể có giao với khung đã khai
+ * hay không khi xếp lịch (xem `freeForShift` trong lib/scheduler.ts).
  */
 export function Availability() {
   const user = useStore((s) => s.data.members.find((m) => m.id === s.userId)!)
@@ -116,31 +121,28 @@ export function Availability() {
                   </div>
                 ))}
 
-                {SHIFTS.map((def) => (
-                  <Fragment key={def.code}>
+                {TIME_BLOCKS.map((block) => (
+                  <Fragment key={block.value}>
                     <div className="flex items-center gap-1.5 py-1 pr-2">
-                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TIER_STYLE[def.tier].dot)} />
                       <div className="min-w-0">
-                        <p className="truncate text-[11.5px] font-bold text-ink-700">{def.code}</p>
-                        <p className="truncate text-[9.5px] text-ink-400">{def.start}–{def.end}</p>
+                        <p className="truncate text-[11.5px] font-bold text-ink-700">{block.label}</p>
+                        <p className="truncate text-[9.5px] text-ink-400">{block.start}–{block.end}</p>
                       </div>
                     </div>
                     {days.map((d) => {
                       const dow = dowOf(d)
-                      const applicable = def.days.includes(dow)
-                      const key = slotKey(dow, def.code)
+                      const key = slotKey(dow, block.value)
                       const active = selected.has(key)
                       return (
                         <button
                           key={key}
-                          disabled={!applicable}
-                          onMouseDown={() => applicable && startDrag(key)}
-                          onMouseEnter={() => applicable && dragOver(key)}
+                          onMouseDown={() => startDrag(key)}
+                          onMouseEnter={() => dragOver(key)}
                           className={cn(
                             'h-9 rounded-lg border text-[10px] font-bold transition-all duration-150',
-                            !applicable && 'invisible',
-                            applicable && active && cn(TIER_STYLE[def.tier].chip, 'shadow-sm scale-[1.03]'),
-                            applicable && !active && 'border-ink-150 border-dashed border-ink-200 bg-white text-ink-300 hover:border-ink-300 hover:bg-ink-50',
+                            active
+                              ? 'border-brand-200 bg-brand-50 text-brand-700 shadow-sm scale-[1.03]'
+                              : 'border-ink-150 border-dashed border-ink-200 bg-white text-ink-300 hover:border-ink-300 hover:bg-ink-50',
                           )}
                         >
                           {active ? 'Rảnh' : ''}
@@ -151,9 +153,6 @@ export function Availability() {
                 ))}
               </div>
             </div>
-          </div>
-          <div className="flex items-center justify-between border-t border-ink-100 px-5 py-3.5">
-            <TierLegend />
           </div>
         </Card>
 

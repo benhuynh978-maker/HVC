@@ -16,9 +16,9 @@ import {
 import { useStore } from '../store/useStore'
 import { Button, Card, CardHeader, EmptyState, PageHeader, Segmented } from '../components/ui'
 import { ShiftTag } from '../components/shared'
-import { ATTENDANCE_LABEL, ATTENDANCE_STYLE, RELIABILITY_DELTA, SHIFTS, SHIFT_MAP } from '../data/config'
-import { cn, minutesOf, parseShiftId, today } from '../lib/utils'
-import type { Assignment, AttendanceStatus, ShiftDef } from '../types'
+import { ATTENDANCE_LABEL, ATTENDANCE_STYLE, RELIABILITY_DELTA } from '../data/config'
+import { cn, minutesOf, today } from '../lib/utils'
+import type { Assignment, AttendanceStatus, ShiftInstance } from '../types'
 
 /** Khung mở "Bước 2" — bao nhiêu phút trước giờ ca thì lời nhắc (tuỳ chọn) xuất hiện. */
 const PRE_SHIFT_WINDOW_MIN = 120
@@ -48,18 +48,22 @@ export function SelfCheckIn() {
     return () => clearInterval(id)
   }, [])
 
+  const shiftMap = useMemo(
+    () => Object.fromEntries(data.shifts.map((s) => [s.id, s])),
+    [data.shifts],
+  )
+
   const todayShifts = useMemo(() => {
     return data.assignments
       .filter((a) => {
         if (a.memberId !== user.id) return false
         if (a.confirmStatus === 'declined') return false
-        const { date } = parseShiftId(a.shiftId)
-        return date === t
+        return shiftMap[a.shiftId]?.date === t
       })
-      .map((a) => ({ a, def: SHIFT_MAP[parseShiftId(a.shiftId).code] }))
+      .map((a) => ({ a, def: shiftMap[a.shiftId] }))
       .filter((x) => !!x.def)
       .sort((x, y) => x.def!.start.localeCompare(y.def!.start))
-  }, [data.assignments, user.id, t])
+  }, [data.assignments, shiftMap, user.id, t])
 
   const finishCheckIn = (assignmentId: string, status: AttendanceStatus) => {
     setAttendance(assignmentId, status, { verifiedByPhoto: true })
@@ -77,11 +81,26 @@ export function SelfCheckIn() {
     attendance: 'none',
   })
 
-  const simDef: ShiftDef = useMemo(() => {
+  /** Ca giả lập cho chế độ xem thử — không còn catalog cố định để lấy mẫu, nên dựng 1 ca quanh giờ hiện tại. */
+  const simDef: ShiftInstance = useMemo(() => {
     const nowMin = currentMinutes()
-    return [...SHIFTS].sort(
-      (x, y) => Math.abs(minutesOf(x.start) - nowMin) - Math.abs(minutesOf(y.start) - nowMin),
-    )[0]
+    const startMin = Math.max(0, nowMin - 15)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const toHHMM = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`
+    return {
+      id: 'sim',
+      date: today(),
+      code: 'sim',
+      name: 'Ca xem thử',
+      start: toHHMM(startMin),
+      end: toHHMM(startMin + 120),
+      tier: 'normal',
+      minStaff: 1,
+      standbyNeeded: 0,
+      weight: 1,
+      hours: 2,
+      status: 'draft',
+    }
   }, [])
 
   const resetPreview = () => setSim({ attendance: 'none' })
@@ -192,7 +211,7 @@ function ShiftCheckInCard({
   onAckPreShift,
   onCheckIn,
 }: {
-  def: ShiftDef
+  def: ShiftInstance
   isLead: boolean
   confirmStatus: Assignment['confirmStatus']
   attendance: AttendanceStatus
@@ -212,7 +231,7 @@ function ShiftCheckInCard({
   return (
     <Card className="overflow-hidden animate-fade-up">
       <CardHeader
-        icon={<ShiftTag code={def.code} showTime={false} />}
+        icon={<ShiftTag shift={def} showTime={false} />}
         title={
           <span className="flex items-center gap-1.5">
             {def.name}

@@ -5,17 +5,21 @@ import type {
   ExternalEvent,
   Member,
   MemberGroup,
+  ShiftInstance,
+  ShiftTier,
   Skill,
 } from '../types'
-import { SHIFTS, SHIFT_MAP } from './config'
+import { WEIGHT_PER_HOUR } from './config'
 import { runScheduler } from '../lib/scheduler'
 import {
   addDays,
   dowOf,
   hasStaffProfile,
   makeRng,
+  minutesOf,
   parseShiftId,
   pickSome,
+  shiftId,
   slotKey,
   today,
   uid,
@@ -81,37 +85,40 @@ function slugEmail(name: string, i: number) {
   return `${last}${initialsPart}${i === 0 ? '' : ''}@hvc.vn`
 }
 
-/** Sinh lịch rảnh nền theo nhóm đối tượng — mỗi nhóm có nhịp sinh hoạt khác nhau. */
+/**
+ * Sinh lịch rảnh nền theo nhóm đối tượng — mỗi nhóm có nhịp sinh hoạt khác
+ * nhau. Không còn khai theo mã ca cố định — khai theo 4 KHUNG GIỜ trong
+ * ngày (sáng/trưa/chiều/tối), khớp với "Lịch rảnh của tôi" hiện tại.
+ */
 function baselineFor(group: MemberGroup, cap: number, rnd: () => number): string[] {
-  const weekdayPeak = ['A', 'C', 'D', 'F']
-  const weekdayLow = ['B', 'E']
-  const weekendCodes = ['W1', 'W2', 'W3']
+  const blocks: ('morning' | 'midday' | 'afternoon' | 'evening')[] = [
+    'morning',
+    'midday',
+    'afternoon',
+    'evening',
+  ]
   const slots = new Set<string>()
-
   const target = Math.max(4, Math.round(cap * 2.4)) // quy tắc "khai gấp đôi"
 
-  const pools: { dow: number; code: string; w: number }[] = []
+  const pools: { dow: number; block: (typeof blocks)[number]; w: number }[] = []
   for (let dow = 1; dow <= 5; dow++) {
-    for (const c of weekdayPeak) {
-      const w = group === 'HS' ? 1 : group === 'SV' ? 0.5 : 0.15
-      pools.push({ dow, code: c, w: c === 'A' ? w * 0.6 : w })
-    }
-    for (const c of weekdayLow) {
-      const w = group === 'HS' ? 0.35 : group === 'SV' ? 1 : 0.2
-      pools.push({ dow, code: c, w })
-    }
+    // HS: rảnh sáng sớm/chiều tối (ngoài giờ học). SV: rảnh trưa. DL: rảnh tối.
+    pools.push({ dow, block: 'morning', w: group === 'HS' ? 0.5 : group === 'SV' ? 0.5 : 0.15 })
+    pools.push({ dow, block: 'midday', w: group === 'HS' ? 0.35 : group === 'SV' ? 1 : 0.2 })
+    pools.push({ dow, block: 'afternoon', w: group === 'HS' ? 0.7 : group === 'SV' ? 0.6 : 0.25 })
+    pools.push({ dow, block: 'evening', w: group === 'HS' ? 0.4 : group === 'SV' ? 0.7 : 1 })
   }
   for (const dow of [6, 7]) {
-    for (const c of weekendCodes) {
+    for (const block of blocks) {
       const w = group === 'DL' ? 1.4 : group === 'SV' ? 0.8 : 0.55
-      pools.push({ dow, code: c, w })
+      pools.push({ dow, block, w })
     }
   }
 
   let guard = 0
   while (slots.size < target && guard++ < 600) {
     const p = pools[Math.floor(rnd() * pools.length)]
-    if (rnd() < p.w * 0.55) slots.add(slotKey(p.dow, p.code))
+    if (rnd() < p.w * 0.55) slots.add(slotKey(p.dow, p.block))
   }
   return [...slots]
 }
@@ -258,6 +265,53 @@ function buildEvents(thisWeek: string, nextWeek: string, members: Member[]): Ext
   ]
 }
 
+/** Ca mẫu cho 1 ngày — tên/giờ/tầng/định mức, dùng để dựng ShiftInstance thật. */
+const DAY_SHIFT_TEMPLATES: Record<number, { name: string; start: string; end: string; tier: ShiftTier; minStaff: number }[]> = {
+  1: [{ name: 'Trước giờ vào lớp', start: '06:30', end: '07:30', tier: 'peak', minStaff: 3 }],
+  2: [{ name: 'Ra chơi giữa buổi', start: '09:30', end: '11:00', tier: 'peak', minStaff: 3 }],
+  3: [{ name: 'Tan học sáng / nghỉ trưa', start: '11:00', end: '13:00', tier: 'peak', minStaff: 3 }],
+  4: [{ name: 'Tiết học buổi chiều', start: '13:00', end: '15:00', tier: 'low', minStaff: 1 }],
+  5: [{ name: 'Tan học chiều', start: '15:00', end: '17:30', tier: 'peak', minStaff: 3 }],
+  6: [
+    { name: 'Sáng cuối tuần', start: '08:00', end: '10:30', tier: 'normal', minStaff: 2 },
+    { name: 'Trưa cuối tuần', start: '10:30', end: '13:00', tier: 'normal', minStaff: 2 },
+  ],
+  7: [{ name: 'Chiều cuối tuần', start: '13:00', end: '16:00', tier: 'normal', minStaff: 2 }],
+}
+
+/**
+ * Dựng danh sách ShiftInstance cho 1 tuần mẫu — mô phỏng việc Admin đã tự
+ * tạo ca riêng cho từng ngày (không còn catalog cố định). Mỗi ngày trong
+ * tuần được gán 1–2 ca theo mẫu ở trên, mỗi ca là 1 ShiftInstance độc lập.
+ */
+function buildWeekShifts(weekStart: string): ShiftInstance[] {
+  const shifts: ShiftInstance[] = []
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(weekStart, i) // Thứ 2..CN theo weekStart
+    const dow = dowOf(date)
+    const templates = DAY_SHIFT_TEMPLATES[dow] ?? []
+    templates.forEach((tpl, idx) => {
+      const code = `s${date}-${idx}`
+      const hours = Math.max(0, (minutesOf(tpl.end) - minutesOf(tpl.start)) / 60)
+      shifts.push({
+        id: shiftId(date, code),
+        date,
+        code,
+        name: tpl.name,
+        start: tpl.start,
+        end: tpl.end,
+        tier: tpl.tier,
+        minStaff: tpl.minStaff,
+        standbyNeeded: tpl.tier === 'low' ? 1 : 0,
+        hours,
+        weight: hours * WEIGHT_PER_HOUR[tpl.tier],
+        status: 'draft',
+      })
+    })
+  }
+  return shifts
+}
+
 export function buildSeed(): AppData {
   const t = today()
   const tomorrowStr = addDays(t, 1)
@@ -275,11 +329,14 @@ export function buildSeed(): AppData {
   const events = buildEvents(thisWeek, nextWeek, members)
 
   // --- Tuần trước: đã trực xong ---
+  // Ca của mỗi tuần mẫu được dựng sẵn ở đây (mô phỏng việc Admin đã tự tạo ca
+  // riêng cho từng ngày) — thuật toán chỉ xếp NGƯỜI vào những ca này.
   const prev = runScheduler({
     weekStart: lastWeek,
     members,
     availability,
     events,
+    existingShifts: buildWeekShifts(lastWeek),
   })
   prev.shifts.forEach((s) => (s.status = 'published'))
 
@@ -302,6 +359,7 @@ export function buildSeed(): AppData {
     members,
     availability,
     events,
+    existingShifts: buildWeekShifts(thisWeek),
     priorBurden: {},
     lastWeekSlots,
   })
@@ -321,6 +379,7 @@ export function buildSeed(): AppData {
     members,
     availability,
     events,
+    existingShifts: buildWeekShifts(nextWeek),
     priorBurden: cur.burden,
     lastWeekSlots: curWeekSlots,
   })
@@ -407,6 +466,3 @@ export function buildSeed(): AppData {
     logs,
   }
 }
-
-export const SHIFT_CODES = SHIFTS.map((s) => s.code)
-export { SHIFT_MAP }

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Crown } from 'lucide-react'
-import type { Member } from '../types'
-import { SHIFT_MAP, TIER_LABEL, TIER_STYLE, DAY_SHORT } from '../data/config'
+import type { Member, ShiftInstance } from '../types'
+import { TIER_LABEL, TIER_STYLE, DAY_SHORT } from '../data/config'
 import { addDays, cn, dowOf, formatDate, formatWeekRange, weekStartOf, today } from '../lib/utils'
 import { Avatar, Badge, Button } from './ui'
 
@@ -53,16 +53,20 @@ export function WeekNav({
   )
 }
 
-/** Nhãn ca: mã + khung giờ + tầng. */
-export function ShiftTag({ code, showTime = true }: { code: string; showTime?: boolean }) {
-  const def = SHIFT_MAP[code]
-  if (!def) return null
-  const st = TIER_STYLE[def.tier]
+/** Nhãn ca: tên + khung giờ + tầng. Nhận thẳng ShiftInstance vì không còn catalog cố định để tra theo mã. */
+export function ShiftTag({
+  shift,
+  showTime = true,
+}: {
+  shift: Pick<ShiftInstance, 'name' | 'start' | 'end' | 'tier'>
+  showTime?: boolean
+}) {
+  const st = TIER_STYLE[shift.tier]
   return (
     <span className={cn('chip', st.chip)}>
       <span className={cn('h-1.5 w-1.5 rounded-full', st.dot)} />
-      <span className="font-bold">{def.code}</span>
-      {showTime && <span className="font-medium opacity-75">{def.start}–{def.end}</span>}
+      <span className="font-bold">{shift.name}</span>
+      {showTime && <span className="font-medium opacity-75">{shift.start}–{shift.end}</span>}
     </span>
   )
 }

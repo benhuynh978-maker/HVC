@@ -1,5 +1,5 @@
 import type { AppData, Assignment, ShiftInstance, StaffMember } from '../types'
-import { PROJECT_START_DATE, SHIFT_MAP } from '../data/config'
+import { PROJECT_START_DATE } from '../data/config'
 import {
   addDays,
   formatDateLong,
@@ -60,9 +60,7 @@ export function presentCount(shift: ShiftInstance, assignments: Assignment[]): n
 }
 
 export function isUnderStaffed(shift: ShiftInstance, assignments: Assignment[]): boolean {
-  const def = SHIFT_MAP[shift.code]
-  if (!def) return false
-  return presentCount(shift, assignments) < def.minStaff
+  return presentCount(shift, assignments) < shift.minStaff
 }
 
 export function computeBurden(
@@ -71,9 +69,9 @@ export function computeBurden(
 ): Record<string, number> {
   const out: Record<string, number> = {}
   for (const m of data.members) out[m.id] = 0
+  const shiftMap = Object.fromEntries(data.shifts.map((s) => [s.id, s]))
   for (const a of assignmentsOfWeek(data, weekStart)) {
-    const { code } = parseShiftId(a.shiftId)
-    const def = SHIFT_MAP[code]
+    const def = shiftMap[a.shiftId]
     if (!def) continue
     let w = def.weight
     if (a.isStandby) w *= 0.4
@@ -144,9 +142,9 @@ export interface Contribution {
 
 export function computeContributions(data: AppData, weeks: string[]): Contribution[] {
   const weekSet = new Set(weeks)
-  const shiftIds = new Set(
-    data.shifts.filter((s) => weekSet.has(weekStartOf(s.date))).map((s) => s.id),
-  )
+  const weekShifts = data.shifts.filter((s) => weekSet.has(weekStartOf(s.date)))
+  const shiftIds = new Set(weekShifts.map((s) => s.id))
+  const shiftMap = Object.fromEntries(weekShifts.map((s) => [s.id, s]))
 
   return data.members
     .filter((m) => m.active)
@@ -156,7 +154,7 @@ export function computeContributions(data: AppData, weeks: string[]): Contributi
       let hours = 0
       let burden = 0
       for (const a of list) {
-        const def = SHIFT_MAP[parseShiftId(a.shiftId).code]
+        const def = shiftMap[a.shiftId]
         if (!def) continue
         hours += def.hours
         burden += (a.isStandby ? def.weight * 0.4 : def.weight) + (a.isLead ? 0.25 : 0)

@@ -3,16 +3,13 @@ import { HandHeart, Repeat2, ShieldCheck, Users2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { Badge, Button, Callout, Card, EmptyState, PageHeader, Tab, TabList, Tabs } from '../components/ui'
 import { AvatarStack, ShiftTag } from '../components/shared'
-import { SHIFT_MAP } from '../data/config'
-import { formatDateLong, parseShiftId, relativeDayLabel, today } from '../lib/utils'
-import type { Assignment, Member, SwapRequest } from '../types'
+import { formatDateLong, relativeDayLabel, today } from '../lib/utils'
+import type { Assignment, Member, ShiftInstance, SwapRequest } from '../types'
 
 interface OpenSwapItem {
   sw: SwapRequest
   a: Assignment
-  date: string
-  code: string
-  def: (typeof SHIFT_MAP)[string] | undefined
+  shift: ShiftInstance
   from: Member
 }
 
@@ -34,6 +31,10 @@ export function Swaps() {
     () => Object.fromEntries(data.members.map((m) => [m.id, m])),
     [data.members],
   )
+  const shiftMap = useMemo(
+    () => Object.fromEntries(data.shifts.map((s) => [s.id, s])),
+    [data.shifts],
+  )
 
   const openSwaps = useMemo(() => {
     const items: OpenSwapItem[] = []
@@ -41,26 +42,26 @@ export function Swaps() {
       if (sw.status !== 'open') continue
       const a = data.assignments.find((x) => x.id === sw.assignmentId)
       if (!a) continue
-      const { date, code } = parseShiftId(a.shiftId)
-      if (date < t) continue
+      const shift = shiftMap[a.shiftId]
+      if (!shift || shift.date < t) continue
       const from = memberMap[sw.fromMemberId]
       if (!from) continue
-      items.push({ sw, a, date, code, def: SHIFT_MAP[code], from })
+      items.push({ sw, a, shift, from })
     }
-    return items.sort((x, y) => x.date.localeCompare(y.date))
-  }, [data.swaps, data.assignments, memberMap, t])
+    return items.sort((x, y) => x.shift.date.localeCompare(y.shift.date))
+  }, [data.swaps, data.assignments, memberMap, shiftMap, t])
 
   const upcomingShifts = useMemo(
     () =>
       data.shifts
         .filter((s) => s.date >= t && s.status === 'published')
-        .sort((a, b) => (a.date + a.code).localeCompare(b.date + b.code))
+        .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))
         .slice(0, 40),
     [data.shifts, t],
   )
 
-  const eligibleToClaim = (date: string, code: string) => {
-    const pool = standbyPool(date, code)
+  const eligibleToClaim = (shiftId: string) => {
+    const pool = standbyPool(shiftId)
     return pool.some((m) => m.id === user.id)
   }
 
@@ -103,14 +104,14 @@ export function Swaps() {
               />
             </Card>
           ) : (
-            openSwaps.map(({ sw, a, date, code, def, from }) => {
-              const canClaim = eligibleToClaim(date, code) && from.id !== user.id
+            openSwaps.map(({ sw, a, shift, from }) => {
+              const canClaim = eligibleToClaim(shift.id) && from.id !== user.id
               return (
                 <Card key={sw.id} className="flex flex-wrap items-center gap-3 p-4 animate-fade-up">
-                  <ShiftTag code={code} />
+                  <ShiftTag shift={shift} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] font-semibold text-ink-800">
-                      {relativeDayLabel(date)} · {def?.name}
+                      {relativeDayLabel(shift.date)} · {shift.name}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-400">
                       <AvatarStack members={[from]} max={1} size="xs" />
@@ -141,18 +142,17 @@ export function Swaps() {
           </Callout>
 
           {upcomingShifts.map((s) => {
-            const def = SHIFT_MAP[s.code]
-            const pool = standbyPool(s.date, s.code)
-            const under = data.assignments.filter((a) => a.shiftId === s.id && !a.isStandby).length < (def?.minStaff ?? 0)
+            const pool = standbyPool(s.id)
+            const under = data.assignments.filter((a) => a.shiftId === s.id && !a.isStandby).length < s.minStaff
             if (!pool.length && !under) return null
             return (
               <Card key={s.id} className="p-4 animate-fade-up">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <ShiftTag code={s.code} />
+                    <ShiftTag shift={s} />
                     <div>
                       <p className="text-[13px] font-semibold text-ink-800">
-                        {relativeDayLabel(s.date)} · {def?.name}
+                        {relativeDayLabel(s.date)} · {s.name}
                       </p>
                       <p className="text-[11.5px] text-ink-400">{formatDateLong(s.date)}</p>
                     </div>

@@ -1,4 +1,4 @@
-import type { ShiftDef, MemberGroup, Skill, AttendanceStatus } from '../types'
+import type { MemberGroup, Skill, AttendanceStatus, ShiftTier, TimeBlock } from '../types'
 
 /**
  * Toàn bộ tham số vận hành nằm ở một chỗ duy nhất.
@@ -28,121 +28,43 @@ export const DAY_SHORT: Record<number, string> = {
   7: 'CN',
 }
 
-/** Khung ca chuẩn — khớp với Đề mục 2 của bài làm. */
-export const SHIFTS: ShiftDef[] = [
-  {
-    code: 'A',
-    name: 'Trước giờ vào lớp',
-    start: '06:30',
-    end: '07:30',
-    tier: 'peak',
-    minStaff: 3,
-    standbyNeeded: 0,
-    days: WEEKDAYS,
-    weight: 1.3 * 1.25,
-    hours: 1,
-  },
-  {
-    code: 'B',
-    name: 'Tiết 1–2',
-    start: '07:30',
-    end: '09:30',
-    tier: 'low',
-    minStaff: 1,
-    standbyNeeded: 1,
-    days: WEEKDAYS,
-    weight: 0.75,
-    hours: 2,
-  },
-  {
-    code: 'C',
-    name: 'Ra chơi giữa buổi',
-    start: '09:30',
-    end: '11:00',
-    tier: 'peak',
-    minStaff: 3,
-    standbyNeeded: 0,
-    days: WEEKDAYS,
-    weight: 1.25,
-    hours: 1.5,
-  },
-  {
-    code: 'D',
-    name: 'Tan học sáng / nghỉ trưa',
-    start: '11:00',
-    end: '13:00',
-    tier: 'peak',
-    minStaff: 3,
-    standbyNeeded: 0,
-    days: WEEKDAYS,
-    weight: 1.25,
-    hours: 2,
-  },
-  {
-    code: 'E',
-    name: 'Tiết học buổi chiều',
-    start: '13:00',
-    end: '15:00',
-    tier: 'low',
-    minStaff: 1,
-    standbyNeeded: 1,
-    days: WEEKDAYS,
-    weight: 0.75,
-    hours: 2,
-  },
-  {
-    code: 'F',
-    name: 'Tan học chiều',
-    start: '15:00',
-    end: '17:30',
-    tier: 'peak',
-    minStaff: 3,
-    standbyNeeded: 0,
-    days: WEEKDAYS,
-    weight: 1.25,
-    hours: 2.5,
-  },
-  {
-    code: 'W1',
-    name: 'Sáng cuối tuần',
-    start: '08:00',
-    end: '10:30',
-    tier: 'normal',
-    minStaff: 2,
-    standbyNeeded: 0,
-    days: WEEKEND,
-    weight: 1.5,
-    hours: 2.5,
-  },
-  {
-    code: 'W2',
-    name: 'Trưa cuối tuần',
-    start: '10:30',
-    end: '13:00',
-    tier: 'normal',
-    minStaff: 2,
-    standbyNeeded: 0,
-    days: WEEKEND,
-    weight: 1.5,
-    hours: 2.5,
-  },
-  {
-    code: 'W3',
-    name: 'Chiều cuối tuần',
-    start: '13:00',
-    end: '16:00',
-    tier: 'normal',
-    minStaff: 2,
-    standbyNeeded: 0,
-    days: WEEKEND,
-    weight: 1.5,
-    hours: 3,
-  },
+/**
+ * Ca trực không còn là catalog cố định — Admin/Điều phối viên tự tạo từng ca
+ * riêng cho từng ngày ngay tại "Lịch trực tuần" (xem `createShift` trong
+ * store). Phần dưới đây chỉ còn các hằng số dùng chung: khung giờ để thành
+ * viên khai lịch rảnh, và hệ số quy đổi điểm gánh nặng.
+ */
+
+/** 4 khung giờ cố định trong ngày — dùng ở "Lịch rảnh của tôi" thay cho việc khai theo mã ca cụ thể. */
+export const TIME_BLOCKS: { value: TimeBlock; label: string; start: string; end: string }[] = [
+  { value: 'morning', label: 'Sáng', start: '06:00', end: '11:00' },
+  { value: 'midday', label: 'Trưa', start: '11:00', end: '13:00' },
+  { value: 'afternoon', label: 'Chiều', start: '13:00', end: '18:00' },
+  { value: 'evening', label: 'Tối', start: '18:00', end: '22:00' },
 ]
 
-export const SHIFT_MAP: Record<string, ShiftDef> = Object.fromEntries(
-  SHIFTS.map((s) => [s.code, s]),
-)
+export const TIME_BLOCK_LABEL: Record<TimeBlock, string> = Object.fromEntries(
+  TIME_BLOCKS.map((b) => [b.value, b.label]),
+) as Record<TimeBlock, string>
+
+/** Tra khung giờ chứa một mốc "HH:MM" — dùng để so ca cụ thể với lịch rảnh đã khai theo khung. */
+export function blockOf(hhmm: string): TimeBlock {
+  const [h, m] = hhmm.split(':').map(Number)
+  const mins = h * 60 + m
+  for (const b of TIME_BLOCKS) {
+    const [bh, bm] = b.start.split(':').map(Number)
+    const [eh, em] = b.end.split(':').map(Number)
+    if (mins >= bh * 60 + bm && mins < eh * 60 + em) return b.value
+  }
+  return TIME_BLOCKS[TIME_BLOCKS.length - 1].value
+}
+
+/** Hệ số điểm gánh nặng theo giờ, phân theo tầng ca — dùng để tự tính `weight` khi Admin tạo ca, không bắt nhập số trừu tượng. */
+export const WEIGHT_PER_HOUR: Record<ShiftTier, number> = {
+  peak: 0.6,
+  normal: 0.5,
+  low: 0.4,
+}
 
 export const TIER_LABEL: Record<string, string> = {
   peak: 'Cao điểm',

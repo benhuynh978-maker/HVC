@@ -16,7 +16,6 @@ import { useStore } from '../store/useStore'
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Segmented } from '../components/ui'
 import { AvatarStack, ShiftTag } from '../components/shared'
 import { computePersonalCounters, isUnderStaffed, presentCount, type StatPeriod } from '../lib/metrics'
-import { SHIFT_MAP } from '../data/config'
 import { cn, formatDateLong, parseShiftId, relativeDayLabel, today, tomorrow } from '../lib/utils'
 
 /**
@@ -43,6 +42,11 @@ export function StaffDashboard() {
     [data, user.id, period],
   )
 
+  const shiftMap = useMemo(
+    () => Object.fromEntries(data.shifts.map((s) => [s.id, s])),
+    [data.shifts],
+  )
+
   /* Ca của tôi cần xác nhận (ngày mai) */
   const myPending = useMemo(
     () =>
@@ -52,8 +56,9 @@ export function StaffDashboard() {
           const { date } = parseShiftId(a.shiftId)
           return date === tmr
         })
-        .map((a) => ({ a, ...parseShiftId(a.shiftId) })),
-    [data.assignments, user.id, tmr],
+        .map((a) => ({ a, shift: shiftMap[a.shiftId] }))
+        .filter((x) => x.shift),
+    [data.assignments, shiftMap, user.id, tmr],
   )
 
   /* Ca hôm nay */
@@ -61,25 +66,23 @@ export function StaffDashboard() {
     return data.shifts
       .filter((s) => s.date === t)
       .map((s) => {
-        const def = SHIFT_MAP[s.code]
         const list = data.assignments.filter((a) => a.shiftId === s.id)
         return {
           shift: s,
-          def,
           members: list.filter((a) => !a.isStandby).map((a) => memberMap[a.memberId]).filter(Boolean),
           lead: memberMap[list.find((a) => a.isLead)?.memberId ?? ''],
           present: presentCount(s, data.assignments),
           under: isUnderStaffed(s, data.assignments),
         }
       })
-      .sort((a, b) => (a.def?.start ?? '').localeCompare(b.def?.start ?? ''))
+      .sort((a, b) => a.shift.start.localeCompare(b.shift.start))
   }, [data, t, memberMap])
 
   /* Ca đang cần người (chợ ca) — vẫn có ích với nhân viên vì có thể nhận cứu viện */
   const openShifts = useMemo(() => {
     return data.shifts
       .filter((s) => s.date >= t && s.status === 'published')
-      .map((s) => ({ s, def: SHIFT_MAP[s.code], under: isUnderStaffed(s, data.assignments) }))
+      .map((s) => ({ s, under: isUnderStaffed(s, data.assignments) }))
       .filter((x) => x.under)
       .sort((a, b) => a.s.date.localeCompare(b.s.date))
       .slice(0, 5)
@@ -119,8 +122,8 @@ export function StaffDashboard() {
                 sẽ tự động mở cho người dự bị và bạn <strong>không bị trừ điểm uy tín</strong>.
               </p>
               <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {myPending.map(({ a, code }) => (
-                  <ShiftTag key={a.id} code={code} />
+                {myPending.map(({ a, shift }) => (
+                  <ShiftTag key={a.id} shift={shift} />
                 ))}
               </div>
             </div>
@@ -192,19 +195,19 @@ export function StaffDashboard() {
               />
             ) : (
               <div className="divide-y divide-ink-100">
-                {todayShifts.map(({ shift, def, members, lead, present, under }) => (
+                {todayShifts.map(({ shift, members, lead, present, under }) => (
                   <div
                     key={shift.id}
                     className="flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors hover:bg-ink-50/60"
                   >
                     <div className="w-[92px] shrink-0">
-                      <ShiftTag code={shift.code} showTime={false} />
+                      <ShiftTag shift={shift} showTime={false} />
                       <p className="mt-1 text-[11.5px] font-semibold text-ink-400">
-                        {def?.start}–{def?.end}
+                        {shift.start}–{shift.end}
                       </p>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13.5px] font-semibold text-ink-800">{def?.name}</p>
+                      <p className="truncate text-[13.5px] font-semibold text-ink-800">{shift.name}</p>
                       <div className="mt-1.5 flex items-center gap-2">
                         <AvatarStack members={members} />
                         {lead && (
@@ -220,7 +223,7 @@ export function StaffDashboard() {
                         under ? 'text-rose-600' : 'text-emerald-600',
                       )}
                     >
-                      {present}/{def?.minStaff}
+                      {present}/{shift.minStaff}
                     </span>
                   </div>
                 ))}
@@ -252,12 +255,12 @@ export function StaffDashboard() {
               />
             ) : (
               <div className="divide-y divide-ink-100">
-                {openShifts.map(({ s, def }) => (
+                {openShifts.map(({ s }) => (
                   <div key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                    <ShiftTag code={s.code} />
+                    <ShiftTag shift={s} />
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-semibold text-ink-800">
-                        {relativeDayLabel(s.date)} · {def?.name}
+                        {relativeDayLabel(s.date)} · {s.name}
                       </p>
                     </div>
                     <Badge tone="danger">Thiếu người</Badge>
