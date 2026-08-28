@@ -70,12 +70,11 @@ export function SelfCheckIn() {
   }
 
   // ------------------------------------------------------------------
-  // Chế độ xem thử — CHỈ tồn tại trong bản dev (import.meta.env.DEV),
-  // Vite loại bỏ toàn bộ khối này khỏi bundle khi `npm run build`.
-  // Camera là thật (để xem đúng trải nghiệm), nhưng kết quả chỉ đổi
-  // state cục bộ — không đụng store thật.
+  // Chế độ xem thử — hiện ở mọi môi trường (kể cả bản deploy Netlify), để
+  // ai cũng xem trước được cả 3 bước mà không cần đợi đúng ngày có ca thật.
+  // Camera là thật (để xem đúng trải nghiệm), nhưng kết quả chỉ đổi state
+  // cục bộ — không bao giờ đụng tới dữ liệu thật trong store.
   // ------------------------------------------------------------------
-  const isDev = import.meta.env.DEV
   const [previewMode, setPreviewMode] = useState<'off' | 'force-has' | 'force-empty'>('off')
   const [sim, setSim] = useState<{ attendance: AttendanceStatus; checkInAt?: string; preShiftAckAt?: string }>({
     attendance: 'none',
@@ -115,32 +114,29 @@ export function SelfCheckIn() {
         desc="Quy trình 3 bước cho ca của bạn hôm nay. Trang này chỉ hiển thị ca của riêng bạn."
       />
 
-      {isDev && (
-        <div className="mb-5 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <p className="flex items-center gap-1.5 text-[12px] font-bold text-amber-700">
-              <Wrench size={13} /> Chế độ xem thử (chỉ hiện khi phát triển)
-            </p>
-            <Segmented
-              value={previewMode}
-              onChange={(v) => {
-                setPreviewMode(v)
-                resetPreview()
-              }}
-              options={[
-                { value: 'off', label: 'Dữ liệu thật' },
-                { value: 'force-has', label: 'Có ca' },
-                { value: 'force-empty', label: 'Không có ca' },
-              ]}
-            />
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-amber-700/80">
-            Dùng để xem trước cả 3 bước mà không cần đợi đúng ngày có ca thật. Camera là thật, nhưng
-            kết quả chỉ hiển thị tạm, không lưu vào dữ liệu thật. Bản build thật (deploy) sẽ không có
-            khối này.
+      <div className="mb-5 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <p className="flex items-center gap-1.5 text-[12px] font-bold text-amber-700">
+            <Wrench size={13} /> Chế độ xem thử
           </p>
+          <Segmented
+            value={previewMode}
+            onChange={(v) => {
+              setPreviewMode(v)
+              resetPreview()
+            }}
+            options={[
+              { value: 'off', label: 'Dữ liệu thật' },
+              { value: 'force-has', label: 'Có ca' },
+              { value: 'force-empty', label: 'Không có ca' },
+            ]}
+          />
         </div>
-      )}
+        <p className="mt-2 text-[11px] leading-relaxed text-amber-700/80">
+          Dùng để xem trước cả 3 bước mà không cần đợi đúng ngày có ca thật. Camera là thật, nhưng
+          kết quả chỉ hiển thị tạm, không lưu vào dữ liệu thật.
+        </p>
+      </div>
 
       {effectiveMode === 'empty' ? (
         <Card>
