@@ -32,11 +32,13 @@ import { buildSeed } from '../data/seed'
  */
 
 // v2: đổi mô hình ca trực từ catalog cố định (SHIFT_MAP) sang ShiftInstance
-// tự mang đủ field (name/start/end/tier/minStaff...). Đổi khoá lưu trữ để
-// mọi trình duyệt đang có dữ liệu v1 cũ tự động seed lại theo mô hình mới,
-// thay vì đọc thiếu field và làm vỡ toàn bộ giao diện (React không có error
-// boundary nên 1 lỗi render là mất trắng cả trang).
-export const STORAGE_KEY = 'hvc-staff-hub:v2'
+// tự mang đủ field (name/start/end/tier/minStaff...).
+// v3: đổi mã `MemberGroup` từ Học sinh/Sinh viên/Đi làm (HS/SV/DL) sang 5 ban
+// phụ trách (TC/NS/TT/DD/DN). Mỗi lần đổi mô hình đều bump khoá lưu trữ để
+// mọi trình duyệt đang có dữ liệu cũ tự động seed lại theo mô hình mới, thay
+// vì đọc mã không khớp bảng nhãn (badge trống) hoặc thiếu field làm vỡ giao
+// diện (React không có error boundary nên 1 lỗi render là mất trắng cả trang).
+export const STORAGE_KEY = 'hvc-staff-hub:v3'
 
 export interface DataAdapter {
   load(): Promise<AppData | null>
@@ -74,9 +76,10 @@ export const db: DataAdapter = new LocalStorageAdapter()
 
 /** Nạp dữ liệu; lần đầu tiên thì sinh dữ liệu mẫu. */
 export async function loadOrSeed(): Promise<AppData> {
-  // Dọn key phiên bản dữ liệu cũ (trước khi đổi mô hình ca trực) nếu còn sót lại.
+  // Dọn key phiên bản dữ liệu cũ (trước các lần đổi mô hình) nếu còn sót lại.
   try {
     localStorage.removeItem('hvc-staff-hub:v1')
+    localStorage.removeItem('hvc-staff-hub:v2')
   } catch {
     /* bỏ qua */
   }
