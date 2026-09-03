@@ -23,9 +23,12 @@ export function Login() {
 
   if (userId) return <Navigate to="/" replace />
 
+  // Chỉ 2 tài khoản mẫu — Admin và Điều phối viên dùng chung một giao diện
+  // quản trị (isAdminRole), không có giao diện riêng biệt nào ở giữa, nên
+  // hiện thêm 1 thẻ Điều phối viên ở đây dễ khiến người dùng tưởng có trải
+  // nghiệm thứ 3 tách biệt.
   const quickAccounts = [
     members.find((m) => m.role === 'admin'),
-    members.find((m) => m.role === 'coordinator'),
     members.find((m) => m.role === 'member'),
   ].filter(Boolean)
 
