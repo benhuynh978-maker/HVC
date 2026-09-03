@@ -63,16 +63,6 @@ export function Login() {
         <div className="absolute -bottom-32 -right-16 h-96 w-96 rounded-full bg-brand-300/25 blur-3xl" />
 
         <div className="relative flex h-full flex-col justify-between p-12 text-white">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-              <span className="text-[15px] font-extrabold">HV</span>
-            </div>
-            <div className="leading-tight">
-              <p className="text-[15px] font-extrabold">HVC Staff Hub</p>
-              <p className="text-[11.5px] text-white/70">Hùng Vương Concert</p>
-            </div>
-          </div>
-
           <div className="max-w-md animate-fade-up">
             <h1 className="text-[34px] font-extrabold leading-[1.15] tracking-tight">
               Không còn ca trống,
@@ -110,18 +100,6 @@ export function Login() {
       {/* Cột đăng nhập */}
       <div className="dot-grid flex flex-1 items-center justify-center bg-ink-50 px-5 py-10">
         <div className="w-full max-w-[400px] animate-fade-up">
-          <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white">
-                <span className="text-[13px] font-extrabold">HV</span>
-              </div>
-              <div className="leading-tight">
-                <p className="text-[15px] font-extrabold text-ink-900">HVC Staff Hub</p>
-                <p className="text-[11px] text-ink-400">Hùng Vương Concert</p>
-              </div>
-            </div>
-          </div>
-
           <h2 className="text-[24px] font-extrabold tracking-tight text-ink-900">Đăng nhập</h2>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-500">
             Tài khoản do Ban Nhân sự cấp khi bạn gia nhập. Hệ thống không có chức năng tự đăng ký.

@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import { Avatar, Badge, Button } from '../ui'
+import { Avatar, Button } from '../ui'
 import { ROLE_LABEL } from '../../data/config'
 import { cn, isAdminRole, parseShiftId, today, tomorrow } from '../../lib/utils'
 
@@ -89,22 +89,6 @@ const STAFF_GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
 ]
-
-function Logo({ compact }: { compact?: boolean }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-sm">
-        <span className="text-[13px] font-extrabold tracking-tight">HV</span>
-      </div>
-      {!compact && (
-        <div className="leading-tight">
-          <p className="text-[14px] font-extrabold tracking-tight text-ink-900">Staff Hub</p>
-          <p className="text-[10.5px] font-medium text-ink-400">Hùng Vương Concert</p>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function AppShell() {
   const [open, setOpen] = useState(false)
@@ -211,9 +195,6 @@ export function AppShell() {
     <div className="flex h-full">
       {/* Sidebar — desktop */}
       <aside className="hidden w-[248px] shrink-0 flex-col border-r border-ink-100 bg-white lg:flex">
-        <div className="flex h-16 items-center px-5">
-          <Logo />
-        </div>
         {nav}
         {footer}
       </aside>
@@ -223,8 +204,7 @@ export function AppShell() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-ink-900/35 backdrop-blur-[3px] animate-fade-in" onClick={() => setOpen(false)} />
           <aside className="relative flex h-full w-[268px] flex-col bg-white shadow-2xl animate-slide-in">
-            <div className="flex h-16 items-center justify-between px-5">
-              <Logo />
+            <div className="flex h-16 items-center justify-end px-5">
               <button
                 onClick={() => setOpen(false)}
                 className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100"
@@ -248,14 +228,7 @@ export function AppShell() {
           >
             <Menu size={19} />
           </button>
-          <div className="lg:hidden">
-            <Logo compact />
-          </div>
-
           <div className="ml-auto flex items-center gap-2.5">
-            <Badge tone="brand" className="hidden sm:inline-flex">
-              Project F&amp;B · Mùa 2026
-            </Badge>
             {pendingCount > 0 && (
               <NavLink to="/my">
                 <Button size="sm" variant="primary" className="gap-1.5">
