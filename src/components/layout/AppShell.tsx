@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  BarChart3,
   CalendarCheck2,
   CalendarDays,
   CalendarRange,
@@ -60,7 +59,8 @@ const ADMIN_GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Quản trị',
     items: [
       { to: '/members', label: 'Thành viên', icon: Users },
-      { to: '/reports', label: 'Báo cáo & KPI', icon: BarChart3 },
+      // "Báo cáo & KPI" tạm ẩn khỏi menu — route /reports vẫn còn nguyên,
+      // chỉ không có lối vào từ điều hướng. Thêm lại dòng nav item khi cần mở lại.
     ],
   },
 ]

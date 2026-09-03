@@ -3,7 +3,6 @@ import {
   Car,
   Lock,
   MapPin,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Star,
@@ -118,12 +117,6 @@ export function External() {
                   </Button>
                 )}
               </div>
-              {!isManager && !eligible && !selected && (
-                <p className="border-t border-ink-100 px-4 py-2.5 text-[11px] leading-relaxed text-amber-600">
-                  <ShieldAlert size={11} className="mr-1 inline" />
-                  Cần: có thể di chuyển + điểm uy tín ≥80.
-                </p>
-              )}
             </Card>
           )
         })}

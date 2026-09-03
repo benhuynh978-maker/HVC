@@ -5,10 +5,8 @@ import {
   ArrowRight,
   CalendarPlus,
   CheckCircle2,
-  Gauge,
   Loader2,
   Rocket,
-  ShieldCheck,
   Sparkles,
   Trash2,
   Users,
@@ -18,23 +16,6 @@ import { Button, Callout, Card, CardHeader, PageHeader, useConfirm } from '../co
 import { BarRow, WeekNav } from '../components/shared'
 import type { SchedulerResult } from '../lib/scheduler'
 import { addDays, cn, formatDateLong, today, weekStartOf } from '../lib/utils'
-
-const HARD_RULES = [
-  ['H1', 'Chỉ xếp người đã khai rảnh đúng khung giờ đó'],
-  ['H2', 'Mỗi ca phải đủ định mức tối thiểu theo tầng ca'],
-  ['H3', 'Không trùng lịch điểm bán ngoài (kèm đệm di chuyển 60 phút)'],
-  ['H4', 'Không vượt trần cam kết tự nguyện của cá nhân'],
-  ['H5', 'Mỗi ca có đúng 1 ca trưởng'],
-  ['H6', 'Không quá 2 ca/ngày và không quá 4 giờ liên tục'],
-  ['H7', 'Ca cao điểm luôn có ≥1 người đã trực ≥3 ca'],
-] as const
-
-const SOFT_RULES = [
-  ['S1', 'Cân bằng điểm gánh nặng, không cân bằng số ca thô'],
-  ['S2', 'Ưu tiên người đang có tải thấp so với trần cam kết'],
-  ['S3', 'Xoay vòng ca — hạn chế lặp lại ca tuần trước'],
-  ['S6', 'Hạn chế xếp một người cả hai ngày cuối tuần'],
-] as const
 
 /**
  * Xếp lịch tự động — chạy trực tiếp thuật toán trong lib/scheduler.ts (Lớp 1
@@ -120,43 +101,7 @@ export function AutoSchedule() {
         action={<WeekNav weekStart={weekStart} onChange={setWeekStart} />}
       />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
-        {/* Cột trái: ràng buộc */}
-        <div className="space-y-5">
-          <Card className="p-5 animate-fade-up">
-            <p className="label mb-3 flex items-center gap-1.5">
-              <ShieldCheck size={13} /> Ràng buộc cứng
-            </p>
-            <div className="space-y-2.5">
-              {HARD_RULES.map(([code, desc]) => (
-                <div key={code} className="flex gap-2 text-[12px] leading-relaxed">
-                  <span className="mt-0.5 shrink-0 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-extrabold text-rose-600">
-                    {code}
-                  </span>
-                  <span className="text-ink-600">{desc}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-5 animate-fade-up">
-            <p className="label mb-3 flex items-center gap-1.5">
-              <Gauge size={13} /> Ràng buộc mềm (tối ưu)
-            </p>
-            <div className="space-y-2.5">
-              {SOFT_RULES.map(([code, desc]) => (
-                <div key={code} className="flex gap-2 text-[12px] leading-relaxed">
-                  <span className="mt-0.5 shrink-0 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-extrabold text-brand-600">
-                    {code}
-                  </span>
-                  <span className="text-ink-600">{desc}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Cột phải: hành động + kết quả */}
+      <div className="mx-auto max-w-2xl">
         <div className="space-y-5">
           <Card className="animate-fade-up overflow-hidden">
             <div className="flex flex-col items-center gap-4 bg-gradient-to-br from-brand-50 via-white to-white p-8 text-center sm:flex-row sm:text-left">
@@ -296,7 +241,7 @@ export function AutoSchedule() {
               <button className="font-bold underline" onClick={run}>
                 Chạy lại thuật toán
               </button>{' '}
-              để xem chi tiết ràng buộc và cân bằng tải.
+              để xem chi tiết kết quả và cân bằng tải.
             </Callout>
           )}
         </div>

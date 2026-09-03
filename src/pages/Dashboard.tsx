@@ -11,7 +11,6 @@ import {
   Repeat2,
   ShieldCheck,
   TriangleAlert,
-  UserRoundCheck,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatCard } from '../components/ui'
@@ -295,31 +294,6 @@ export function Dashboard() {
                 })}
               </div>
             )}
-          </div>
-        </Card>
-
-        {/* ---- Nhật ký ---- */}
-        <Card className="animate-fade-up">
-          <CardHeader icon={<UserRoundCheck size={17} />} title="Nhật ký vận hành" desc="Những gì vừa xảy ra" />
-          <div className="max-h-[320px] space-y-3.5 overflow-y-auto border-t border-ink-100 px-5 py-4">
-            {data.logs.slice(0, 12).map((l) => (
-              <div key={l.id} className="flex gap-2.5">
-                <StatusDot
-                  tone={l.kind === 'success' ? 'good' : l.kind === 'warn' ? 'warn' : l.kind === 'danger' ? 'bad' : 'idle'}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] leading-relaxed text-ink-700">{l.text}</p>
-                  <p className="mt-0.5 text-[11px] text-ink-300">
-                    {new Date(l.at).toLocaleString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      day: '2-digit',
-                      month: '2-digit',
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
           </div>
         </Card>
       </div>
