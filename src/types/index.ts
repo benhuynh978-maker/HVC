@@ -6,8 +6,8 @@
 
 export type Role = 'admin' | 'coordinator' | 'member'
 
-/** Nhóm đối tượng — dùng để cân bằng tải giữa các nhóm có lịch sinh hoạt khác nhau. */
-export type MemberGroup = 'HS' | 'SV' | 'DL'
+/** Ban phụ trách trong đội hình sự kiện. */
+export type MemberGroup = 'TC' | 'NS' | 'TT' | 'DD' | 'DN'
 
 export type Skill = 'cashier' | 'sales' | 'logistics' | 'media'
 

@@ -33,42 +33,70 @@ import {
  *  · tuần sau    : CHƯA xếp — để người dùng tự bấm "Xếp lịch tự động" và xem thuật toán chạy
  */
 
-const NAMES: [string, MemberGroup, string][] = [
-  ['Nguyễn Minh Anh', 'SV', 'ĐH Sư phạm'],
-  ['Trần Bảo Ngọc', 'HS', '11A1'],
-  ['Lê Hoàng Khoa', 'HS', '11A2'],
-  ['Phạm Thuỳ Lan', 'HS', '10A3'],
-  ['Vũ Đức Tuấn', 'SV', 'ĐH Bách khoa'],
-  ['Đặng Hà My', 'HS', '12A1'],
-  ['Bùi Quang Duy', 'HS', '11B2'],
-  ['Hoàng Thảo Vy', 'HS', '10A1'],
-  ['Ngô Gia Phúc', 'HS', '12A4'],
-  ['Đỗ Thanh Linh', 'HS', '11A5'],
-  ['Lý Nam Sơn', 'SV', 'ĐH Kinh tế'],
-  ['Phan Kim Thảo', 'HS', '10A2'],
-  ['Trịnh Hoài An', 'HS', '11A3'],
-  ['Dương Nhật Huy', 'HS', '12A2'],
-  ['Cao Mỹ Duyên', 'HS', '10A4'],
-  ['Đinh Trọng Nghĩa', 'DL', 'Cựu HV'],
-  ['Tạ Khánh Vân', 'HS', '11A1'],
-  ['Mai Tiến Đạt', 'HS', '12A3'],
-  ['Chu Bích Hạnh', 'SV', 'ĐH Ngoại thương'],
-  ['Hồ Minh Quân', 'HS', '10A5'],
-  ['Lâm Yến Nhi', 'HS', '11B1'],
-  ['Võ Anh Kiệt', 'HS', '12A5'],
-  ['Trương Diệu Linh', 'HS', '10A1'],
-  ['Nguyễn Bá Lộc', 'DL', 'Cựu HV'],
-  ['Phùng Thu Trang', 'HS', '11A4'],
-  ['Đoàn Hữu Thắng', 'HS', '12B1'],
-  ['Huỳnh Ái Vy', 'HS', '10A3'],
-  ['Lương Chí Bảo', 'SV', 'ĐH Y Dược'],
-  ['Tô Ngọc Mai', 'HS', '11A2'],
-  ['Kiều Đăng Khôi', 'HS', '12A1'],
-  ['Nguyễn Hải Yến', 'HS', '10A2'],
-  ['Trần Sỹ Nguyên', 'DL', 'Cựu HV'],
-  ['Đỗ Hồng Nhung', 'HS', '11B3'],
-  ['Phạm Gia Hân', 'HS', '10A4'],
+const NAMES: [string, string][] = [
+  ['Nguyễn Minh Anh', 'ĐH Sư phạm'],
+  ['Trần Bảo Ngọc', '11A1'],
+  ['Lê Hoàng Khoa', '11A2'],
+  ['Phạm Thuỳ Lan', '10A3'],
+  ['Vũ Đức Tuấn', 'ĐH Bách khoa'],
+  ['Đặng Hà My', '12A1'],
+  ['Bùi Quang Duy', '11B2'],
+  ['Hoàng Thảo Vy', '10A1'],
+  ['Ngô Gia Phúc', '12A4'],
+  ['Đỗ Thanh Linh', '11A5'],
+  ['Lý Nam Sơn', 'ĐH Kinh tế'],
+  ['Phan Kim Thảo', '10A2'],
+  ['Trịnh Hoài An', '11A3'],
+  ['Dương Nhật Huy', '12A2'],
+  ['Cao Mỹ Duyên', '10A4'],
+  ['Đinh Trọng Nghĩa', 'Cựu HV'],
+  ['Tạ Khánh Vân', '11A1'],
+  ['Mai Tiến Đạt', '12A3'],
+  ['Chu Bích Hạnh', 'ĐH Ngoại thương'],
+  ['Hồ Minh Quân', '10A5'],
+  ['Lâm Yến Nhi', '11B1'],
+  ['Võ Anh Kiệt', '12A5'],
+  ['Trương Diệu Linh', '10A1'],
+  ['Nguyễn Bá Lộc', 'Cựu HV'],
+  ['Phùng Thu Trang', '11A4'],
+  ['Đoàn Hữu Thắng', '12B1'],
+  ['Huỳnh Ái Vy', '10A3'],
+  ['Lương Chí Bảo', 'ĐH Y Dược'],
+  ['Tô Ngọc Mai', '11A2'],
+  ['Kiều Đăng Khôi', '12A1'],
+  ['Nguyễn Hải Yến', '10A2'],
+  ['Trần Sỹ Nguyên', 'Cựu HV'],
+  ['Đỗ Hồng Nhung', '11B3'],
+  ['Phạm Gia Hân', '10A4'],
 ]
+
+/** 5 ban phụ trách — thành viên được chia ngẫu nhiên (nhưng đều) vào đây, xem `assignCommittees`. */
+const COMMITTEES: MemberGroup[] = ['TC', 'NS', 'TT', 'DD', 'DN']
+
+/** Xáo đều COMMITTEES lặp lại cho đủ `count` người rồi trộn ngẫu nhiên — số người mỗi ban chỉ lệch nhau tối đa 1. */
+function assignCommittees(count: number, rnd: () => number): MemberGroup[] {
+  const pool: MemberGroup[] = []
+  while (pool.length < count) pool.push(...COMMITTEES)
+  pool.length = count
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool
+}
+
+/**
+ * "Ban phụ trách" (group) giờ chỉ là thông tin tổ chức — không còn quyết định
+ * nhịp sinh hoạt như trước (khi group còn là Học sinh/Sinh viên/Đi làm). Nhịp
+ * sinh hoạt dùng để sinh lịch rảnh mẫu tách riêng ra thành "lifestyle", suy ra
+ * độc lập từ id, để dữ liệu mẫu vẫn đa dạng mà không gán cho ban một khuôn mẫu
+ * sinh hoạt vô căn cứ.
+ */
+type Lifestyle = 'A' | 'B' | 'C'
+function lifestyleOf(memberId: string): Lifestyle {
+  const idx = Number(memberId.slice(1)) - 1
+  return (['A', 'B', 'C'] as const)[((idx % 3) + 3) % 3]
+}
 
 const ALL_SKILLS: Skill[] = ['cashier', 'sales', 'logistics', 'media']
 
@@ -86,11 +114,12 @@ function slugEmail(name: string, i: number) {
 }
 
 /**
- * Sinh lịch rảnh nền theo nhóm đối tượng — mỗi nhóm có nhịp sinh hoạt khác
- * nhau. Không còn khai theo mã ca cố định — khai theo 4 KHUNG GIỜ trong
- * ngày (sáng/trưa/chiều/tối), khớp với "Lịch rảnh của tôi" hiện tại.
+ * Sinh lịch rảnh nền theo nhịp sinh hoạt (`Lifestyle`, độc lập với ban phụ
+ * trách — xem `lifestyleOf`) — mỗi nhịp có giờ rảnh khác nhau. Không còn khai
+ * theo mã ca cố định — khai theo 4 KHUNG GIỜ trong ngày (sáng/trưa/chiều/tối),
+ * khớp với "Lịch rảnh của tôi" hiện tại.
  */
-function baselineFor(group: MemberGroup, cap: number, rnd: () => number): string[] {
+function baselineFor(lifestyle: Lifestyle, cap: number, rnd: () => number): string[] {
   const blocks: ('morning' | 'midday' | 'afternoon' | 'evening')[] = [
     'morning',
     'midday',
@@ -102,15 +131,15 @@ function baselineFor(group: MemberGroup, cap: number, rnd: () => number): string
 
   const pools: { dow: number; block: (typeof blocks)[number]; w: number }[] = []
   for (let dow = 1; dow <= 5; dow++) {
-    // HS: rảnh sáng sớm/chiều tối (ngoài giờ học). SV: rảnh trưa. DL: rảnh tối.
-    pools.push({ dow, block: 'morning', w: group === 'HS' ? 0.5 : group === 'SV' ? 0.5 : 0.15 })
-    pools.push({ dow, block: 'midday', w: group === 'HS' ? 0.35 : group === 'SV' ? 1 : 0.2 })
-    pools.push({ dow, block: 'afternoon', w: group === 'HS' ? 0.7 : group === 'SV' ? 0.6 : 0.25 })
-    pools.push({ dow, block: 'evening', w: group === 'HS' ? 0.4 : group === 'SV' ? 0.7 : 1 })
+    // A: rảnh sáng sớm/chiều tối. B: rảnh trưa. C: rảnh tối.
+    pools.push({ dow, block: 'morning', w: lifestyle === 'A' ? 0.5 : lifestyle === 'B' ? 0.5 : 0.15 })
+    pools.push({ dow, block: 'midday', w: lifestyle === 'A' ? 0.35 : lifestyle === 'B' ? 1 : 0.2 })
+    pools.push({ dow, block: 'afternoon', w: lifestyle === 'A' ? 0.7 : lifestyle === 'B' ? 0.6 : 0.25 })
+    pools.push({ dow, block: 'evening', w: lifestyle === 'A' ? 0.4 : lifestyle === 'B' ? 0.7 : 1 })
   }
   for (const dow of [6, 7]) {
     for (const block of blocks) {
-      const w = group === 'DL' ? 1.4 : group === 'SV' ? 0.8 : 0.55
+      const w = lifestyle === 'C' ? 1.4 : lifestyle === 'B' ? 0.8 : 0.55
       pools.push({ dow, block, w })
     }
   }
@@ -125,14 +154,18 @@ function baselineFor(group: MemberGroup, cap: number, rnd: () => number): string
 
 function buildMembers(): Member[] {
   const rnd = makeRng(20260823)
+  const committees = assignCommittees(NAMES.length, rnd)
   return NAMES.map((entry, i) => {
-    const [name, group, unit] = entry
+    const [name, unit] = entry
+    const id = `m${String(i + 1).padStart(2, '0')}`
+    const lifestyle = lifestyleOf(id)
+    const group = committees[i]
     const role = i === 0 ? 'admin' : i === 1 || i === 4 ? 'coordinator' : 'member'
-    const cap = group === 'DL' ? 2 : group === 'SV' ? 3 : 2 + Math.floor(rnd() * 3)
+    const cap = lifestyle === 'C' ? 2 : lifestyle === 'B' ? 3 : 2 + Math.floor(rnd() * 3)
     const done = Math.floor(rnd() * 14)
 
     const base: Member = {
-      id: `m${String(i + 1).padStart(2, '0')}`,
+      id,
       name,
       email: slugEmail(name, i),
       password: 'hvc2026',
@@ -154,9 +187,9 @@ function buildMembers(): Member[] {
         maxShiftsPerWeek: cap,
         skills: pickSome(ALL_SKILLS, 1 + Math.floor(rnd() * 2), rnd),
         reliability: Math.round(72 + rnd() * 26),
-        parentConsent: group === 'DL' || group === 'SV' ? true : rnd() > 0.25,
+        parentConsent: lifestyle === 'C' || lifestyle === 'B' ? true : rnd() > 0.25,
         canTravel: rnd() > 0.35,
-        baselineSlots: baselineFor(group, cap, rnd),
+        baselineSlots: baselineFor(lifestyle, cap, rnd),
         totalShiftsDone: done,
       },
     }
@@ -176,7 +209,7 @@ function buildAvailability(members: Member[], weeks: string[]): Availability[] {
       if (submitted) {
         // Bỏ bớt vài khung do lịch học/lịch làm thay đổi, thêm lại vài khung khác
         slots = slots.filter(() => rnd() > 0.18)
-        const extra = baselineFor(m.group, 1, rnd)
+        const extra = baselineFor(lifestyleOf(m.id), 1, rnd)
         for (const s of extra) if (rnd() > 0.6) slots.push(s)
         slots = [...new Set(slots)]
       }

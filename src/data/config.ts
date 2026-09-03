@@ -91,9 +91,11 @@ export const TIER_STYLE: Record<string, { dot: string; chip: string; bar: string
 }
 
 export const GROUP_LABEL: Record<MemberGroup, string> = {
-  HS: 'Học sinh',
-  SV: 'Sinh viên',
-  DL: 'Người đi làm',
+  TC: 'Ban Tài chính chiến lược',
+  NS: 'Ban Nhân sự',
+  TT: 'Ban Truyền thông',
+  DD: 'Ban Đạo diễn nghệ thuật',
+  DN: 'Ban Đối ngoại',
 }
 
 export const SKILL_LABEL: Record<Skill, string> = {

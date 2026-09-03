@@ -62,9 +62,11 @@ export function Members() {
           onChange={setGroup}
           options={[
             { value: 'all', label: 'Tất cả' },
-            { value: 'HS', label: 'Học sinh' },
-            { value: 'SV', label: 'Sinh viên' },
-            { value: 'DL', label: 'Đi làm' },
+            { value: 'TC', label: 'Tài chính' },
+            { value: 'NS', label: 'Nhân sự' },
+            { value: 'TT', label: 'Truyền thông' },
+            { value: 'DD', label: 'Đạo diễn NT' },
+            { value: 'DN', label: 'Đối ngoại' },
           ]}
         />
       </div>
@@ -124,7 +126,7 @@ export function Members() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <InfoBox label="Nhóm đối tượng" value={GROUP_LABEL[selected.group]} />
+              <InfoBox label="Ban phụ trách" value={GROUP_LABEL[selected.group]} />
               <InfoBox label="Vai trò" value={ROLE_LABEL[selected.role]} />
               <InfoBox label="Trần cam kết" value={`${selected.staff.maxShiftsPerWeek} ca/tuần`} />
               <InfoBox label="Tổng ca đã trực" value={`${selected.staff.totalShiftsDone} ca`} />
